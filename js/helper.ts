@@ -3,6 +3,14 @@ import { log } from "./logger.js";
 import type { RequestHandler } from "express";
 import type { Socket, Namespace } from "socket.io";
 
+/**
+ * Base class for module server-side helpers.
+ *
+ * A helper runs in the Node process and backs a single module.
+ * Override the lifecycle hooks (`init`, `loaded`, `start`, `stop`) and
+ * `socketNotificationReceived` to implement module behaviour.
+ * Use `sendSocketNotification` and `registerRoute` to communicate outward.
+ */
 class Helper {
 	name!: string;
 	path!: string;
@@ -13,22 +21,31 @@ class Helper {
 		this.init();
 	}
 
+	/** Called in the constructor — safe for synchronous field setup, no server access yet. */
 	init(): void {}
 
+	/** Called by Core after `name` and `path` are set but before `start()`. */
 	loaded(): void {}
 
+	/** Async setup hook — open DB connections, start timers, etc. Called once at startup. */
 	start(): Promise<void> {
 		return Promise.resolve();
 	}
 
+	/** Teardown hook — cancel timers, close connections. */
 	stop(): void {
 		log.debug("Helper", `Stopping: ${this.name}`);
 	}
 
+	/**
+	 * Receives every socket event emitted by the module's client-side counterpart.
+	 * Override this instead of wiring `socketio.on` directly.
+	 */
 	socketNotificationReceived(notification: string, payload: unknown): void {
 		log.debug(`Helper:${this.name}`, `socket notification: ${notification}`, payload);
 	}
 
+	/** Broadcasts a notification to all clients connected to this module's namespace. */
 	sendSocketNotification(notification: string, payload: unknown): void {
 		this.socketio.emit(notification, payload);
 	}
@@ -41,6 +58,10 @@ class Helper {
 		this.path = path;
 	}
 
+	/**
+	 * Registers an Express route under the module's own path prefix (`/<moduleName>`).
+	 * Only available when the manifest grants `express.route`.
+	 */
 	registerRoute(
 		method: "get" | "post" | "put" | "delete" | "use",
 		path: string,

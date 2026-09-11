@@ -13,15 +13,15 @@ import { clients as clientsTable, clientUsers as clientUsersTable, userConfigs a
 
 import type { ServerConfig } from "../types/config.js";
 import { log } from "./logger.js";
-import type { ModuleDefinition, UserConfig } from "../types/module.js";
+import type { ModuleDefinition, ActiveConfig } from "../types/module.js";
 import type { ModuleManifest, HelperPermission } from "../types/index.js";
 
-export type UserObj = { path: string; data: UserConfig };
+export type UserConfig = ActiveConfig;
 export type ClientModuleMap = Record<
 	string,
 	{
 		defaultModules: ModuleDefinition[];
-		usersSpecific: UserObj[];
+		usersSpecific: UserConfig[];
 	}
 >;
 
@@ -35,10 +35,17 @@ const coreModules = new Set([
 	"personalization", "personalUserSwitcher", "userManager",
 ]);
 
+/**
+ * Application kernel — owns configuration, module lifecycle, and the HTTP/Socket server.
+ *
+ * Startup order: `new Core(rootDir)` → `start()`.
+ * Everything else (DB, server, helpers) is initialised inside `start()`.
+ */
 class Core {
 	rootDir: string;
 	config: ServerConfig;
 	moduleHelpers: LoadedHelper[];
+	/** Names of modules that live under `modules/default/`. Populated during `start()`. */
 	defaultModuleNames: string[] = [];
 	allClients!: ClientModuleMap;
 	diffModules!: string[];
@@ -70,6 +77,11 @@ class Core {
 		this.moduleHelpers = [];
 	}
 
+	/**
+	 * Merges a flat module list with any modules embedded in a layout.
+	 * Layout modules are appended only when not already present in the flat list,
+	 * so an explicit flat entry always wins over the layout default.
+	 */
 	extractModulesFromRow(modulesJson: string, layoutJson: string | null | undefined): ModuleDefinition[] {
 		const flat = JSON.parse(modulesJson) as ModuleDefinition[];
 		if (!layoutJson) return flat;
@@ -89,7 +101,11 @@ class Core {
 		}
 	}
 
-	getUsersPerClient(client: string, users: string[]): UserObj[] {
+	/**
+	 * Resolves each user's module config for a specific mirror.
+	 * Falls back from client-specific row → global row (clientName `""`) → empty module list.
+	 */
+	getUsersPerClient(client: string, users: string[]): UserConfig[] {
 		const db = getDb();
 		return users.map((user) => {
 			const clientRow = db.select({ modules: userConfigsTable.modules, layout: userConfigsTable.layout })
@@ -97,19 +113,21 @@ class Core {
 				.where(and(eq(userConfigsTable.username, user), eq(userConfigsTable.clientName, client)))
 				.get();
 			if (clientRow) {
-				return { path: "", data: { name: user, modules: this.extractModulesFromRow(clientRow.modules, clientRow.layout) } };
+				return { name: user, modules: this.extractModulesFromRow(clientRow.modules, clientRow.layout) };
 			}
 			const globalRow = db.select({ modules: userConfigsTable.modules, layout: userConfigsTable.layout })
 				.from(userConfigsTable)
 				.where(and(eq(userConfigsTable.username, user), eq(userConfigsTable.clientName, "")))
 				.get();
-			return {
-				path: "",
-				data: { name: user, modules: globalRow ? this.extractModulesFromRow(globalRow.modules, globalRow.layout) : [] },
-			};
+			return { name: user, modules: globalRow ? this.extractModulesFromRow(globalRow.modules, globalRow.layout) : [] };
 		});
 	}
-
+  
+	/**
+	 * Builds the full module map from the DB — keyed by client name.
+	 * Each entry contains the unauthenticated default modules and every assigned user's config.
+	 * Clients missing a DB record are skipped with an error log.
+	 */
 	createModuleArray(): ClientModuleMap {
 		const db = getDb();
 		const modulesInMirrors: ClientModuleMap = {};
@@ -158,6 +176,7 @@ class Core {
 		}
 	}
 
+	/** Deduplicates all module names referenced across every client and user config. */
 	differentModules(): string[] {
 		const diffs: string[] = [];
 
@@ -166,7 +185,7 @@ class Core {
 				if (!diffs.includes(mod.module)) diffs.push(mod.module);
 			}
 			for (const user of this.allClients[client]!.usersSpecific) {
-				for (const userMod of user.data.modules) {
+				for (const userMod of user.modules) {
 					if (!diffs.includes(userMod.module)) diffs.push(userMod.module);
 				}
 			}
@@ -175,6 +194,11 @@ class Core {
 		return diffs;
 	}
 
+	/**
+	 * Security gate for third-party helpers — reads and validates `module.json`.
+	 * Returns `null` (blocking the helper from loading) if the manifest is missing,
+	 * malformed, or declares any permission not in the known allowlist.
+	 */
 	loadAndValidateManifest(moduleFolder: string, moduleName: string): ModuleManifest | null {
 		const manifestPath = `${moduleFolder}/module.json`;
 
@@ -215,58 +239,85 @@ class Core {
 		return manifest;
 	}
 
+	private moduleFolder(moduleName: string): string {
+		return this.defaultModuleNames.includes(moduleName)
+			? `${this.rootDir}/modules/default/${moduleName}`
+			: `${this.rootDir}/modules/${moduleName}`;
+	}
+
+	private loadHelper(moduleName: string): LoadedHelper | null {
+		const folder = this.moduleFolder(moduleName);
+
+		let manifest: ModuleManifest | null = null;
+		if (!coreModules.has(moduleName)) {
+			manifest = this.loadAndValidateManifest(folder, moduleName);
+			if (!manifest) return null;
+		}
+
+		const helperPath = `${folder}/helper.js`;
+		try {
+			fs.accessSync(helperPath, fs.constants.R_OK);
+		} catch {
+			return null;
+		}
+
+		log.info("Core", `Starting helper: ${moduleName}`);
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const HelperClass = require(helperPath.slice(0, -3)) as typeof Helper;
+		const helper = new HelperClass();
+		helper.setName(moduleName);
+		helper.setPath(folder);
+		const loaded: LoadedHelper = { helper, manifest };
+		this.moduleHelpers.push(loaded);
+		helper.loaded();
+		return loaded;
+	}
+
+	private wireHelper({ helper, manifest }: LoadedHelper): void {
+		const has = (perm: HelperPermission): boolean =>
+			manifest === null || manifest.helper.permissions.includes(perm);
+
+		if (has("express.route")) {
+			const router = Router();
+			this.expressApp.use(`/${helper.name}`, router);
+			helper.setExpressApp(router);
+		}
+		if (has("socket.namespace")) {
+			const namespace = this.socketio.of(helper.name);
+			helper.setSocketIO(namespace);
+		}
+	}
+
+	/**
+	 * Loads helpers for all modules referenced in any client config at startup.
+	 * Does NOT wire Express/Socket.IO yet — that happens in `start()` after the server is ready.
+	 */
 	loadModules(): void {
 		this.allClients = this.createModuleArray();
 		this.diffModules = this.differentModules();
 
 		for (const moduleName of this.diffModules) {
-			const moduleFolder = this.defaultModuleNames.includes(moduleName)
-				? `${this.rootDir}/modules/default/${moduleName}`
-				: `${this.rootDir}/modules/${moduleName}`;
-
-			const moduleFile = `${moduleFolder}/${moduleName}.js`;
-
-			let manifest: ModuleManifest | null = null;
-			if (!coreModules.has(moduleName)) {
-				manifest = this.loadAndValidateManifest(moduleFolder, moduleName);
-				if (!manifest) continue;
-			}
-
 			try {
-				fs.accessSync(moduleFile, fs.constants.R_OK);
+				fs.accessSync(`${this.moduleFolder(moduleName)}/${moduleName}.js`, fs.constants.R_OK);
 			} catch {
 				log.debug("Core", `No module file found for ${moduleName}`);
 			}
-
-			const helperPath = `${moduleFolder}/helper.js`;
-			let helperExists = true;
-			try {
-				fs.accessSync(helperPath, fs.constants.R_OK);
-			} catch {
-				helperExists = false;
-			}
-
-			if (helperExists) {
-				log.info("Core", `Starting helper: ${moduleName}`);
-				// eslint-disable-next-line @typescript-eslint/no-require-imports
-				const HelperClass = require(helperPath.slice(0, -3)) as typeof Helper;
-				const helper = new HelperClass();
-
-				helper.setName(moduleName);
-				helper.setPath(moduleFolder);
-				this.moduleHelpers.push({ helper, manifest });
-				helper.loaded();
-			}
+			this.loadHelper(moduleName);
 		}
 	}
 
-	checkMirrorConfigs(): void {
+	/**
+	 * Ensures every client listed in config has a `configs/<name>/` folder and an entry JS file.
+	 * Clients without a folder are removed from `config.clientConfigs` so the rest of startup
+	 * doesn't have to handle missing directories.
+	 */
+	bootstrapClientConfigs(): void {
 
 		const clients = this.config.clientConfigs;
 		for (const client of clients) {
 			const folder = path.join(this.rootDir, "configs", client);
 			if (!fs.existsSync(folder)) {
-				log.error("Core", `No folder found for client '${client}' — removing from config`);
+				log.error("Core", `No folder found for client '${client}'. Removing from config`);
 				const index = this.config.clientConfigs.indexOf(client);
 				this.config.clientConfigs.splice(index, 1);
 				continue;
@@ -293,62 +344,29 @@ class Core {
 		}
 	}
 
+	/**
+	 * Loads, wires, and starts a helper on demand — called when a mirror requests a module
+	 * that wasn't active at startup. No-op if the helper is already running.
+	 */
 	async ensureHelperLoaded(moduleName: string): Promise<void> {
 		if (this.moduleHelpers.some(({ helper }) => helper.name === moduleName)) return;
 
-		const moduleFolder = this.defaultModuleNames.includes(moduleName)
-			? `${this.rootDir}/modules/default/${moduleName}`
-			: `${this.rootDir}/modules/${moduleName}`;
+		const loaded = this.loadHelper(moduleName);
+		if (!loaded) return;
 
-		let manifest: ModuleManifest | null = null;
-		if (!coreModules.has(moduleName)) {
-			manifest = this.loadAndValidateManifest(moduleFolder, moduleName);
-			if (!manifest) return;
-		}
-
-		const helperPath = `${moduleFolder}/helper.js`;
+		this.wireHelper(loaded);
 		try {
-			fs.accessSync(helperPath, fs.constants.R_OK);
-		} catch {
-			return;
-		}
-
-		log.info("Core", `Starting helper on-demand: ${moduleName}`);
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const HelperClass = require(helperPath.slice(0, -3)) as typeof Helper;
-		const helper = new HelperClass();
-		helper.setName(moduleName);
-		helper.setPath(moduleFolder);
-		this.moduleHelpers.push({ helper, manifest });
-		helper.loaded();
-
-		const hasPermission = (perm: HelperPermission): boolean =>
-			manifest === null || manifest.helper.permissions.includes(perm);
-
-		if (hasPermission("express.route")) {
-			const router = Router();
-			this.expressApp.use(`/${helper.name}`, router);
-			helper.setExpressApp(router);
-		}
-		if (hasPermission("socket.namespace")) {
-			const namespace = this.socketio.of(helper.name);
-			helper.setSocketIO(namespace);
-		}
-
-		try {
-			await helper.start();
+			await loaded.helper.start();
 		} catch (error) {
-			log.error("Core", `Error starting on-demand helper for ${moduleName}:`, error);
+			log.error("Core", `Error starting helper ${moduleName}:`, error);
 		}
 	}
 
 	async start(): Promise<void> {
 		fs.mkdirSync(path.join(this.rootDir, "workData"), { recursive: true });
 		initDb(path.join(this.rootDir, "workData/mirror.db"));
-		this.checkMirrorConfigs();
+		this.bootstrapClientConfigs();
 
-		// open() seeds the clients table from JSON config files via loadTrackerFile,
-		// so loadModules() (which reads defaultModules from DB) must run after.
 		this.httpServer = new Server(this.rootDir, this.config);
 		const apps = await this.httpServer.open();
 
@@ -362,34 +380,12 @@ class Core {
 		this.loadModules();
 
 		const helperPromises: Promise<void>[] = [];
-		for (const { helper, manifest } of this.moduleHelpers) {
-			const hasPermission = (perm: HelperPermission): boolean =>
-				manifest === null || manifest.helper.permissions.includes(perm);
-
-			if (hasPermission("express.route")) {
-				const router = Router();
-				this.expressApp.use(`/${helper.name}`, router);
-				helper.setExpressApp(router);
-			}
-
-			if (hasPermission("socket.namespace")) {
-				const namespace = this.socketio.of(helper.name);
-				helper.setSocketIO(namespace);
-			}
-
-			if (hasPermission("fs.read")) {
-			}
-			if (hasPermission("fs.write")) {
-			}
-			if (hasPermission("network.ws")) {
-			}
-			if (hasPermission("network.http")) {
-			}
-
+		for (const loaded of this.moduleHelpers) {
+			this.wireHelper(loaded);
 			try {
-				helperPromises.push(helper.start());
+				helperPromises.push(loaded.helper.start());
 			} catch (error) {
-				log.error("Core", `Error starting helper ${helper.name}:`, error);
+				log.error("Core", `Error starting helper ${loaded.helper.name}:`, error);
 			}
 		}
 

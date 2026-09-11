@@ -18,7 +18,8 @@
 		"postdb:generate": "cp -r js/db/migrations dist/js/db/migrations",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
-		"client:config": "bash scripts/client-config.sh"
+		"client:config": "bash scripts/client-config.sh",
+		"docs": "typedoc"
 	},
 	"author": "Dalibor Peňas",
 	"license": "MIT",
@@ -38,7 +39,9 @@
 		"moment-timezone": "^0.6.3",
 		"node-ical": "^0.27.1",
 		"socket.io": "^4.7.5",
-		"socket.io-client": "^4.8.3"
+		"socket.io-client": "^4.8.3",
+		"swagger-jsdoc": "^6.3.0",
+		"swagger-ui-express": "^5.0.1"
 	},
 	"devDependencies": {
 		"@types/better-sqlite3": "^9.6.0",
@@ -47,6 +50,8 @@
 		"@types/lodash": "^4.17.24",
 		"@types/node": "^25.9.1",
 		"@types/supertest": "^7.2.1",
+		"@types/swagger-jsdoc": "^6.0.4",
+		"@types/swagger-ui-express": "^4.1.8",
 		"drizzle-kit": "^0.31.10",
 		"esbuild": "^0.28.0",
 		"jest": "^30.5.0",
@@ -54,6 +59,7 @@
 		"prettier": "^3.9.6",
 		"supertest": "^7.2.2",
 		"ts-jest": "^29.4.12",
+		"typedoc": "^0.28.20",
 		"typescript": "^6.0.3"
 	}
 }

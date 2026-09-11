@@ -1,0 +1,11 @@
+{
+	"entryPoints": ["js/index.ts", "js/server.ts", "js/core.ts", "js/helper.ts", "js/clientTracker.ts", "js/authService.ts", "js/logger.ts", "js/db/schema.ts", "types"],
+	"entryPointStrategy": "expand",
+	"out": "docs",
+	"tsconfig": "tsconfig.json",
+	"exclude": ["**/__tests__/**", "**/testUtils/**", "**/node_modules/**"],
+	"excludePrivate": false,
+	"excludeInternal": false,
+	"includeVersion": true,
+	"readme": "none"
+}

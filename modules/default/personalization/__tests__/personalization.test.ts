@@ -198,27 +198,31 @@ describe("personalization", () => {
 	describe("renderRow", () => {
 		it("shows the module name in .pers-name", () => {
 			const m = make();
-			const row = m.renderRow({ module: "clock", position: "top_left" }, 0, 3);
+			const arr = [{ module: "clock", position: "top_left" }, {}, {}];
+			const row = m.renderRow(arr[0], 0, 3, arr);
 			expect(row.querySelector(".pers-name")?.textContent).toBe("clock");
 		});
 
 		it("disables the up arrow for the first item", () => {
 			const m = make();
-			const row = m.renderRow({ module: "clock" }, 0, 3);
+			const arr = [{ module: "clock" }, {}, {}];
+			const row = m.renderRow(arr[0], 0, 3, arr);
 			const upBtn = [...row.querySelectorAll(".pers-arrow")].find((b: any) => b.textContent === "↑") as HTMLButtonElement;
 			expect(upBtn?.disabled).toBe(true);
 		});
 
 		it("disables the down arrow for the last item", () => {
 			const m = make();
-			const row = m.renderRow({ module: "clock" }, 2, 3);
+			const arr = [{}, {}, { module: "clock" }];
+			const row = m.renderRow(arr[2], 2, 3, arr);
 			const downBtn = [...row.querySelectorAll(".pers-arrow")].find((b: any) => b.textContent === "↓") as HTMLButtonElement;
 			expect(downBtn?.disabled).toBe(true);
 		});
 
 		it("enables both arrows for a middle item", () => {
 			const m = make();
-			const row = m.renderRow({ module: "clock" }, 1, 3);
+			const arr = [{}, { module: "clock" }, {}];
+			const row = m.renderRow(arr[1], 1, 3, arr);
 			const [upBtn, downBtn] = [...row.querySelectorAll(".pers-arrow")] as HTMLButtonElement[];
 			expect(upBtn?.disabled).toBe(false);
 			expect(downBtn?.disabled).toBe(false);
@@ -229,7 +233,7 @@ describe("personalization", () => {
 			const m = make({ scope: "global", configs: { global: { modules: mods } } });
 			m.markDirty = jest.fn();
 			m.renderList = jest.fn();
-			const row = m.renderRow(mods[0], 0, 2);
+			const row = m.renderRow(mods[0], 0, 2, mods);
 			const delBtn = row.querySelector(".pers-del") as HTMLButtonElement;
 			delBtn.click();
 			expect(m.configs.global.modules).toHaveLength(1);
@@ -239,37 +243,44 @@ describe("personalization", () => {
 
 	describe("renderConfigEditor", () => {
 		it("creates a text input for string values", () => {
-			const m = make({ scope: "global", configs: { global: { modules: [{ config: { city: "Prague" } }] } } });
-			const editor = m.renderConfigEditor({ city: "Prague" }, 0);
+			const m = make({ manifests: { weather: [{ key: "city", type: "string" }] } });
+			const editor = m.renderConfigEditor({ city: "Prague" }, "weather");
 			const input = editor.querySelector("input[type='text']") as HTMLInputElement;
 			expect(input?.value).toBe("Prague");
 		});
 
 		it("creates a number input for numeric values", () => {
-			const m = make({ scope: "global", configs: { global: { modules: [{ config: { zoom: 2 } }] } } });
-			const editor = m.renderConfigEditor({ zoom: 2 }, 0);
+			const m = make({ manifests: { weather: [{ key: "zoom", type: "number" }] } });
+			const editor = m.renderConfigEditor({ zoom: 2 }, "weather");
 			const input = editor.querySelector("input[type='number']") as HTMLInputElement;
 			expect(input?.value).toBe("2");
 		});
 
 		it("creates a checkbox for boolean values", () => {
-			const m = make({ scope: "global", configs: { global: { modules: [{ config: { show: true } }] } } });
-			const editor = m.renderConfigEditor({ show: true }, 0);
+			const m = make({ manifests: { weather: [{ key: "show", type: "boolean" }] } });
+			const editor = m.renderConfigEditor({ show: true }, "weather");
 			const cb = editor.querySelector("input[type='checkbox']") as HTMLInputElement;
 			expect(cb?.checked).toBe(true);
 		});
 
 		it("labels each field with its key", () => {
-			const m = make({ scope: "global", configs: { global: { modules: [{ config: { timezone: "UTC" } }] } } });
-			const editor = m.renderConfigEditor({ timezone: "UTC" }, 0);
+			const m = make({ manifests: { weather: [{ key: "timezone", type: "string" }] } });
+			const editor = m.renderConfigEditor({ timezone: "UTC" }, "weather");
 			expect(editor.querySelector("label")?.textContent).toBe("timezone");
+		});
+
+		it("returns null when no manifest schema is known for the module", () => {
+			const m = make();
+			expect(m.renderConfigEditor({ city: "Prague" }, "weather")).toBeNull();
 		});
 	});
 
 	describe("fetchScope", () => {
 		it("fetches and caches the global config", async () => {
 			const data = { name: "dala", modules: [{ module: "clock" }] };
-			h.fetchMock.mockResolvedValueOnce({ ok: true, json: async () => data } as Response);
+			h.fetchMock
+				.mockResolvedValueOnce({ ok: true, json: async () => data } as Response)
+				.mockResolvedValueOnce({ ok: true, json: async () => ({ config: [] }) } as Response);
 			const m = make();
 			await m.fetchScope("global");
 			expect(m.configs["global"]).toBe(data);

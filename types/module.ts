@@ -17,6 +17,7 @@ export type ModulePosition =
 
 export type ClientType = "mirror" | "dashboard";
 
+// Used in configs to configure a module
 export interface ModuleDefinition {
 	module: string;
 	position?: ModulePosition;
@@ -43,12 +44,14 @@ export interface ModuleInfo {
 	pageKey?: number | "fixed" | string;
 }
 
+// One whole screen of modules
 export interface Page {
 	name?: string;
 	modules: ModuleDefinition[];
 	rotationMs?: number;
 }
 
+// Used in configs to define a layout of pages and modules for one user (not tied to specific mirror/client)
 export interface ClientLayout {
 	pages: Page[];
 	fixed: ModuleDefinition[];
@@ -57,6 +60,7 @@ export interface ClientLayout {
 	rotationMs?: number;
 }
 
+// Used in configs to define a mirror/client itself as an endpoint (tied to a specific mirror/client)
 export interface ClientConfig {
 	name: string;
 	type: ClientType;
@@ -65,7 +69,9 @@ export interface ClientConfig {
 	defaultModules: ModuleDefinition[];
 }
 
-export interface UserConfig {
+// Active config for the currently displayed user, flat modules or paged layout
+export interface ActiveConfig {
 	name: string;
 	modules: ModuleDefinition[];
+	layout?: ClientLayout;
 }

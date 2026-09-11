@@ -1,6 +1,6 @@
 import { getClient, getClientConfig, setConfigInUse } from "./clientState.js";
 import { resetDOM } from "./utils.js";
-import type { ClientLayout, UserConfig } from "../types/module.js";
+import type { ActiveConfig, ClientLayout } from "../types/module.js";
 
 interface UserModuleStorage {
 	name: string;
@@ -37,9 +37,7 @@ export class UserService {
 		getClient().reload();
 	}
 
-	async findUserConfig(
-		userName: string,
-	): Promise<{ name: string; modules: UserConfig["modules"]; layout?: ClientLayout }> {
+	async findUserConfig(userName: string): Promise<ActiveConfig> {
 		const clientConfig = getClientConfig();
 
 		if (userName === "default") {
@@ -61,7 +59,7 @@ export class UserService {
 			headers: { "Content-Type": "text/plain" },
 			body: clientConfig.name,
 		});
-		const data = (await response.json()) as UserConfig & { layout?: ClientLayout };
+		const data = (await response.json()) as ActiveConfig;
 
 		if (clientConfig.userSwitchMode === "SAVE") {
 			this.userModulesStorage.push({ name: data.name, moduleObjs: [] });

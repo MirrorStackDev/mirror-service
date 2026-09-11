@@ -1,11 +1,7 @@
-import type { ClientConfig, ClientLayout, ModuleDefinition } from "../types/module.js";
+import type { ClientConfig, ActiveConfig } from "../types/module.js";
 import type { SessionInfo } from "../types/index.js";
 
-export interface ActiveConfig {
-	name: string;
-	modules: ModuleDefinition[];
-	layout?: ClientLayout;
-}
+export type { ActiveConfig };
 
 // Minimal interface for what module.ts needs from Client, avoids circular import
 export interface ClientRef {

@@ -268,7 +268,7 @@ class personalization extends Module {
 		}
 
 		modules.forEach((mod, index) => {
-			this.listEl.appendChild(this.renderRow(mod, index, modules.length));
+			this.listEl.appendChild(this.renderRow(mod, index, modules.length, modules));
 		});
 	}
 
@@ -369,7 +369,7 @@ class personalization extends Module {
 		return section;
 	}
 
-	renderRow(mod, index, total) {
+	renderRow(mod, index, total, arr) {
 		const row = document.createElement("div");
 		row.className = "pers-row";
 
@@ -392,7 +392,7 @@ class personalization extends Module {
 		reorder.appendChild(downBtn);
 		row.appendChild(reorder);
 
-		row.appendChild(this.renderModuleMain(mod, index, this.configs[this.scope].modules, () => {
+		row.appendChild(this.renderModuleMain(mod, index, arr ?? this.configs[this.scope].modules, () => {
 			this.configs[this.scope].modules.splice(index, 1);
 			this.markDirty();
 			this.renderList();

@@ -8,6 +8,11 @@ import type { Session, SessionInfo, UserRole } from "../types/auth.js";
 export const COOKIE_NAME = "hms-session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Handles account management and session lifecycle.
+ * Sessions are stored in SQLite and mirrored in an in-memory cache for fast token lookups.
+ * Expired sessions are purged from both on construction and on access.
+ */
 export class AuthService {
 	private db: Db;
 	private sessionCache = new Map<string, Session>();
@@ -47,6 +52,7 @@ export class AuthService {
 		log.info("Auth", `Loaded ${this.sessionCache.size} active session(s).`);
 	}
 
+	/** Returns a new session on success, `null` on bad credentials (never throws). */
 	login(username: string, password: string): Session | null {
 		const account = this.db
 			.select()
@@ -71,6 +77,7 @@ export class AuthService {
 		return session;
 	}
 
+	/** Validates a token and returns public session info, or `null` if missing or expired. */
 	getSession(token: string): SessionInfo | null {
 		const session = this.sessionCache.get(token);
 		if (!session) return null;
@@ -98,6 +105,7 @@ export class AuthService {
 			.all();
 	}
 
+	/** @throws if the username is already taken. */
 	createAccount(username: string, displayName: string, role: UserRole, password: string): void {
 		const existing = this.db
 			.select()
@@ -116,6 +124,7 @@ export class AuthService {
 		}).run();
 	}
 
+	/** @throws if the user does not exist. */
 	updateAccount(
 		username: string,
 		updates: { displayName?: string; role?: UserRole; password?: string },
@@ -139,6 +148,10 @@ export class AuthService {
 		}
 	}
 
+	/**
+	 * Deletes an account and invalidates all its active sessions.
+	 * @throws if the user does not exist.
+	 */
 	deleteAccount(username: string): void {
 		const account = this.db
 			.select()

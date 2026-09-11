@@ -12,6 +12,10 @@ interface ClientTrackerJSON {
 	connections: ClientConnection[];
 }
 
+/**
+ * Tracks the runtime state of a connected mirror — online status, active user,
+ * and individual socket connections. Persisted to `cTracker.json` between restarts.
+ */
 class ClientTracker implements ClientTrackerData {
 	name: string;
 	type: ClientType;
@@ -39,6 +43,7 @@ class ClientTracker implements ClientTrackerData {
 		this.connections = connections;
 	}
 
+	/** Deserialises a persisted JSON record — converts date strings back to `Date` objects. */
 	static fromObject(obj: ClientTrackerJSON): ClientTracker {
 		return new ClientTracker(
 			obj.name,

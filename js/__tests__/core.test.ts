@@ -214,8 +214,8 @@ describe("Core.getUsersPerClient", () => {
 		const result = core.getUsersPerClient("bathroom", ["dala", "momi"]);
 
 		expect(result).toHaveLength(2);
-		expect(result[0]!.data).toEqual({ name: "dala", modules: dalaModules });
-		expect(result[1]!.data).toEqual({ name: "momi", modules: [] });
+		expect(result[0]!).toEqual({ name: "dala", modules: dalaModules });
+		expect(result[1]!).toEqual({ name: "momi", modules: [] });
 	});
 
 	it("falls back to global config when no client-specific row exists", () => {
@@ -225,14 +225,14 @@ describe("Core.getUsersPerClient", () => {
 
 		const result = core.getUsersPerClient("bathroom", ["dala"]);
 
-		expect(result[0]!.data.modules).toEqual(globalModules);
+		expect(result[0]!.modules).toEqual(globalModules);
 	});
 
 	it("returns empty modules when no config row exists for the user", () => {
 		const result = core.getUsersPerClient("bathroom", ["ghost"]);
 
 		expect(result).toHaveLength(1);
-		expect(result[0]!.data.modules).toEqual([]);
+		expect(result[0]!.modules).toEqual([]);
 	});
 });
 
@@ -273,10 +273,7 @@ describe("Core.differentModules", () => {
 			bathroom: {
 				defaultModules: [{ module: "clock" }],
 				usersSpecific: [
-					{
-						path: "/fake/path",
-						data: { name: "dala", modules: [{ module: "helloworld" }] },
-					},
+					{ name: "dala", modules: [{ module: "helloworld" }] },
 				],
 			},
 		};
@@ -290,7 +287,7 @@ describe("Core.differentModules", () => {
 			bathroom: {
 				defaultModules: [{ module: "clock" }],
 				usersSpecific: [
-					{ path: "/fake", data: { name: "dala", modules: [{ module: "clock" }] } },
+					{ name: "dala", modules: [{ module: "clock" }] },
 				],
 			},
 			kitchen: {
@@ -352,7 +349,7 @@ describe("Core.createModuleArray", () => {
 		core = makeCore(rootDir, { clientConfigs: ["bathroom"] });
 
 		const result = core.createModuleArray();
-		expect(result["bathroom"]!.usersSpecific[0]!.data).toEqual({ name: "dala", modules: userModules });
+		expect(result["bathroom"]!.usersSpecific[0]!).toEqual({ name: "dala", modules: userModules });
 	});
 
 	it("skips a client with no DB row, without throwing", () => {
@@ -364,10 +361,10 @@ describe("Core.createModuleArray", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// checkMirrorConfigs
+// bootstrapClientConfigs
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("Core.checkMirrorConfigs", () => {
+describe("Core.bootstrapClientConfigs", () => {
 	let rootDir: string;
 
 	beforeEach(() => {
@@ -382,7 +379,7 @@ describe("Core.checkMirrorConfigs", () => {
 	it("removes a client from clientConfigs when its folder does not exist", () => {
 		// bathroom folder is NOT created
 		const core = makeCore(rootDir, { clientConfigs: ["bathroom"], rootConf: "nonexistent" });
-		core.checkMirrorConfigs();
+		core.bootstrapClientConfigs();
 
 		expect(core.config.clientConfigs).not.toContain("bathroom");
 	});
@@ -397,7 +394,7 @@ describe("Core.checkMirrorConfigs", () => {
 		fs.writeFileSync(path.join(jsDir, "mirror.js"), "// mirror template");
 
 		const core = makeCore(rootDir, { clientConfigs: ["bathroom"], rootConf: "nonexistent" });
-		core.checkMirrorConfigs();
+		core.bootstrapClientConfigs();
 
 		expect(fs.existsSync(path.join(rootDir, "configs/bathroom/bathroom.js"))).toBe(true);
 	});
@@ -514,6 +511,7 @@ describe("Core.loadModules", () => {
 		stubModules(["clock"]);
 
 		core = makeCore(rootDir, { providedModules: ["clock"] });
+		core.defaultModuleNames = ["clock"];
 		jest
 			.spyOn(core, "createModuleArray")
 			.mockReturnValue({ clock: { defaultModules: [{ module: "clock" }], usersSpecific: [] } });
