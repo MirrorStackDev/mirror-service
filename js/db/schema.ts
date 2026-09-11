@@ -21,7 +21,8 @@ export const clients = sqliteTable("clients", {
 	name:           text("name").primaryKey(),
 	type:           text("type").notNull().default("mirror"),
 	userSwitchMode: text("user_switch_mode").notNull().default("SAVE"),
-	defaultModules: text("default_modules").notNull().default("[]"),  // JSON: ModuleDefinition[]
+	defaultModules: text("default_modules").notNull().default("[]"),  // JSON: ModuleDefinition[] — legacy, used when layout is null
+	layout:         text("layout"),                                    // JSON: ClientLayout | null
 	// runtime tracker state — reset to defaults on server start
 	status:      text("status").notNull().default("offline"),
 	currentUser: text("current_user").notNull().default("default"),
@@ -43,7 +44,8 @@ export const clientUsers = sqliteTable("client_users", {
 export const userConfigs = sqliteTable("user_configs", {
 	username:   text("username").notNull().references(() => accounts.username, { onDelete: "cascade" }),
 	clientName: text("client_name").notNull().default(""),  // "" = global config
-	modules:    text("modules").notNull().default("[]"),    // JSON: ModuleDefinition[]
+	modules:    text("modules").notNull().default("[]"),    // JSON: ModuleDefinition[] (used when layout is null)
+	layout:     text("layout"),                             // JSON: ClientLayout | null (paged user config)
 }, (t) => [
 	primaryKey({ columns: [t.username, t.clientName] }),
 ]);

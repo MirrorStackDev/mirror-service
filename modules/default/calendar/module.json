@@ -1,0 +1,28 @@
+{
+	"name": "calendar",
+	"helper": {
+		"permissions": ["socket.namespace"]
+	},
+	"client": {
+		"permissions": ["notifications.send"]
+	},
+	"config": [
+		{ "key": "calendars", "type": "urllist", "default": [], "label": "Calendar URLs" },
+		{ "key": "maximumEntries", "type": "number", "default": 10, "label": "Max entries" },
+		{ "key": "maximumNumberOfDays", "type": "number", "default": 365, "label": "Days ahead" },
+		{
+			"key": "timeFormat",
+			"type": "select",
+			"default": "relative",
+			"label": "Time format",
+			"options": ["relative", "absolute", "dateheaders"]
+		},
+		{ "key": "showEnd", "type": "boolean", "default": false, "label": "Show end time" },
+		{ "key": "showLocation", "type": "boolean", "default": false, "label": "Show location" },
+		{ "key": "hidePrivate", "type": "boolean", "default": false, "label": "Hide private" },
+		{ "key": "hideOngoing", "type": "boolean", "default": false, "label": "Hide ongoing" },
+		{ "key": "hideDuplicates", "type": "boolean", "default": true, "label": "Hide duplicates" },
+		{ "key": "fade", "type": "boolean", "default": true, "label": "Fade" },
+		{ "key": "broadcastEvents", "type": "boolean", "default": true, "label": "Broadcast events" }
+	]
+}

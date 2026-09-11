@@ -5,6 +5,17 @@ class userManager extends Module {
 
 	defaults() {
 		this.defaults = {};
+		this._ready = false;
+	}
+
+	async start() {
+		const session = getSession();
+		if (session?.role !== "admin") {
+			this.hide(0);
+		} else {
+			this._ready = true;
+			this.updateDom();
+		}
 	}
 
 	async fetchUsers() {
@@ -14,6 +25,8 @@ class userManager extends Module {
 	}
 
 	async createDom() {
+		if (!this._ready) return document.createElement("div");
+
 		const users = await this.fetchUsers();
 		const currentUser = getSession();
 

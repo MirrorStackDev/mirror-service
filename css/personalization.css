@@ -266,3 +266,147 @@
 .pers-add-confirm:hover {
 	background: rgba(59, 130, 246, 0.1) !important;
 }
+
+.pers-config-del {
+	padding: 0.1rem 0.35rem !important;
+	color: var(--color-text-dimmed) !important;
+	border-color: transparent !important;
+	font-size: 0.75rem;
+	opacity: 0.5;
+}
+
+.pers-config-del:hover {
+	color: #f87171 !important;
+	border-color: rgba(248, 113, 113, 0.3) !important;
+	opacity: 1;
+}
+
+.pers-config-key {
+	width: 5rem;
+	font-style: italic;
+	opacity: 0.6;
+}
+
+.pers-config-key:focus {
+	opacity: 1;
+}
+
+.pers-config-checkgroup {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 0.75rem;
+}
+
+.pers-config-chk {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	font-size: var(--font-size-xsmall);
+	color: var(--color-text);
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+.pers-config-chk input[type="checkbox"] {
+	accent-color: var(--panel-accent);
+	cursor: pointer;
+}
+
+/* URL list (calendar urls etc) */
+
+.pers-urllist {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+
+.pers-urllist-row {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+.pers-urllist-input {
+	width: 18rem;
+}
+
+.pers-urllist-auth {
+	display: flex;
+	gap: 0.3rem;
+	margin-top: -0.1rem;
+	margin-bottom: 0.25rem;
+	padding-left: 0.1rem;
+}
+
+.pers-urllist-auth-input {
+	width: 9rem;
+	font-size: var(--font-size-xsmall);
+	opacity: 0.7;
+}
+
+.pers-urllist-auth-input:focus {
+	opacity: 1;
+}
+
+.pers-urllist-add {
+	align-self: flex-start;
+	font-size: var(--font-size-xsmall);
+	color: var(--panel-accent);
+	background: transparent;
+	border: 1px solid var(--panel-accent);
+	border-radius: 4px;
+	padding: 0.1rem 0.5rem;
+	cursor: pointer;
+	font-family: inherit;
+	opacity: 0.75;
+	transition: opacity 0.15s;
+}
+
+.pers-urllist-add:hover {
+	opacity: 1;
+}
+
+/* Page mode */
+
+.pers-pagemode-btn.active {
+	border-color: var(--panel-accent) !important;
+	color: var(--panel-accent) !important;
+}
+
+.pers-page-section {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	border: 1px solid #2a2a2a;
+	border-radius: 8px;
+	padding: 0.6rem 0.75rem;
+	margin-bottom: 0.4rem;
+}
+
+.pers-page-hdr {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.3rem;
+}
+
+.pers-page-title {
+	font-size: var(--font-size-xsmall);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--color-text-dimmed);
+	flex: 1;
+}
+
+.pers-mod-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.pers-add-to-page-btn,
+.pers-add-page-btn {
+	align-self: flex-start;
+	margin-top: 4px;
+}

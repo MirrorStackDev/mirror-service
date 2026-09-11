@@ -530,6 +530,7 @@ describe("Server.adminEndpoints", () => {
 				type: "mirror",
 				userSwitchMode: "DELETE",
 				defaultModules: modules,
+				layout: null,
 			});
 		});
 

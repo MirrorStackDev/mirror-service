@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { eq, lt } from "drizzle-orm";
 import type { Db } from "./db/index.js";
-import { accounts as accountsTable, sessions as sessionsTable } from "./db/schema.js";
+import { accounts as accountsTable, sessions as sessionsTable, userConfigs as userConfigsTable } from "./db/schema.js";
 import type { Session, SessionInfo, UserRole } from "../types/auth.js";
 
 export const COOKIE_NAME = "hms-session";

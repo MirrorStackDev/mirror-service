@@ -1,0 +1,1 @@
+ALTER TABLE `user_configs` ADD `layout` text;

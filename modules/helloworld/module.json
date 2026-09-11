@@ -5,5 +5,16 @@
 	},
 	"client": {
 		"permissions": ["user.name", "notifications.send"]
-	}
+	},
+	"config": [
+		{ "key": "text", "type": "string", "default": "", "label": "Text" },
+		{
+			"key": "classes",
+			"type": "array",
+			"of": "string",
+			"default": [],
+			"label": "Style",
+			"options": ["xsmall", "small", "medium", "large", "xlarge", "thin", "light", "regular", "bold", "bright", "normal", "dimmed", "align-left", "align-right", "pre-line"]
+		}
+	]
 }

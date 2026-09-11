@@ -1,0 +1,11 @@
+{
+	"name": "ha-mirrors-calendar",
+	"version": "1.0.0",
+	"private": true,
+	"dependencies": {
+		"ics-filter": "^1.0.5",
+		"moment": "^2.30.1",
+		"moment-timezone": "^0.5.46",
+		"node-ical": "^0.27.1"
+	}
+}

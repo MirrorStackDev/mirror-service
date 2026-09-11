@@ -17,6 +17,22 @@ export interface CursorSocketPayload {
 	visible: boolean;
 }
 
+export type PageAction =
+	| "select"
+	| "next"
+	| "prev"
+	| "home"
+	| "showHidden"
+	| "leaveHidden"
+	| "pauseRotation"
+	| "resumeRotation";
+
+export interface PageCommandPayload {
+	action: PageAction;
+	page?: number;   // for "select"
+	name?: string;   // for "showHidden"
+}
+
 // All socket event names and their payload types
 export interface ServerSocketEvents {
 	HIDE_MODULE_X: ModuleSocketPayload;
@@ -37,4 +53,6 @@ export interface ClientSocketEvents {
 	CHANGE_USER_Y: UserSocketPayload;
 	TOGGLE_CURSOR_Y: CursorSocketPayload;
 	trackersData: unknown;
+	LAYOUT: import("./module.js").ClientLayout;
+	PAGE_COMMAND: PageCommandPayload;
 }

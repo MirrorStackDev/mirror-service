@@ -1,7 +1,6 @@
-import { fetchConfig } from "./utils.js";
 import { getClient, getClientConfig, setConfigInUse } from "./clientState.js";
-import type { ClientConfig, UserConfig } from "../types/module.js";
 import { resetDOM } from "./utils.js";
+import type { ClientLayout, UserConfig } from "../types/module.js";
 
 interface UserModuleStorage {
 	name: string;
@@ -10,7 +9,6 @@ interface UserModuleStorage {
 
 export class UserService {
 	private userModulesStorage: UserModuleStorage[] = [];
-	private userConfigStorage: UserConfig[] = [];
 	activeUser: string;
 
 	constructor() {
@@ -19,11 +17,12 @@ export class UserService {
 	}
 
 	changeUser(userName: string): void {
+		const name = userName === "GLOBAL" ? "default" : userName;
 		const clientConfig = getClientConfig();
 		if (clientConfig.userSwitchMode === "SAVE") {
-			this.changeUserSAVE(userName);
+			this.changeUserSAVE(name);
 		} else {
-			void this.changeUserDELETE(userName);
+			void this.changeUserDELETE(name);
 		}
 	}
 
@@ -40,19 +39,21 @@ export class UserService {
 
 	async findUserConfig(
 		userName: string,
-	): Promise<{ name: string; modules: UserConfig["modules"] }> {
+	): Promise<{ name: string; modules: UserConfig["modules"]; layout?: ClientLayout }> {
 		const clientConfig = getClientConfig();
 
 		if (userName === "default") {
-			return { name: clientConfig.name, modules: clientConfig.defaultModules };
+			let layout: ClientLayout | undefined;
+			try {
+				const res = await fetch(`/${clientConfig.name}/layout`);
+				if (res.ok) layout = (await res.json()) as ClientLayout;
+			} catch { /* ignore */ }
+			return { name: clientConfig.name, modules: clientConfig.defaultModules, layout };
 		}
 
 		if (clientConfig.userSwitchMode === "SAVE") {
 			const stored = this.userModulesStorage.find((u) => u.name === userName);
 			if (stored) return { name: stored.name, modules: [] };
-		} else {
-			const stored = this.userConfigStorage.find((u) => u.name === userName);
-			if (stored) return stored;
 		}
 
 		const response = await fetch(`/get-user/${userName}`, {
@@ -60,14 +61,12 @@ export class UserService {
 			headers: { "Content-Type": "text/plain" },
 			body: clientConfig.name,
 		});
-		const data = (await response.json()) as UserConfig;
+		const data = (await response.json()) as UserConfig & { layout?: ClientLayout };
 
 		if (clientConfig.userSwitchMode === "SAVE") {
 			this.userModulesStorage.push({ name: data.name, moduleObjs: [] });
-		} else {
-			this.userConfigStorage.push(data);
 		}
 
-		return data;
+		return { name: data.name, modules: data.modules, layout: data.layout };
 	}
 }

@@ -285,3 +285,49 @@ sup {
 	cursor: pointer;
 	font-size: 18px;
 }
+
+#page-indicator {
+	position: fixed;
+	bottom: 20px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	gap: 10px;
+	z-index: 9999;
+}
+
+.page-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.3);
+	cursor: pointer;
+	transition: background 0.3s;
+}
+
+.page-dot.active {
+	background: rgba(255, 255, 255, 0.9);
+}
+
+.page-nav-arrow {
+	position: fixed;
+	top: 50%;
+	transform: translateY(-50%);
+	background: transparent;
+	border: none;
+	color: rgba(255, 255, 255, 0.15);
+	font-size: 4rem;
+	line-height: 1;
+	cursor: pointer;
+	padding: 1rem 0.75rem;
+	z-index: 9999;
+	user-select: none;
+	transition: color 0.2s;
+}
+
+.page-nav-arrow:hover {
+	color: rgba(255, 255, 255, 0.6);
+}
+
+#page-prev { left: 0; }
+#page-next { right: 0; }

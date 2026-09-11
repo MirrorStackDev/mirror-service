@@ -13,11 +13,20 @@ import { AuthService, COOKIE_NAME } from "./authService.js";
 import { getDb } from "./db/index.js";
 import { clients as clientsTable, clientUsers as clientUsersTable, userConfigs as userConfigsTable } from "./db/schema.js";
 import type { ServerConfig } from "../types/config.js";
+import type { ClientLayout, ModuleDefinition } from "../types/module.js";
 import type {
 	ModuleSocketPayload,
 	UserSocketPayload,
 	CursorSocketPayload,
 } from "../types/socket.js";
+
+function resolveLayout(row: { layout: string | null; defaultModules: string }): ClientLayout {
+	if (row.layout) return JSON.parse(row.layout) as ClientLayout;
+	return {
+		pages: [{ modules: JSON.parse(row.defaultModules) as ModuleDefinition[] }],
+		fixed: [],
+	};
+}
 
 class Server {
   rootDir: string;
@@ -31,6 +40,8 @@ class Server {
 	io!: SocketIOServer;
 	auth!: AuthService;
 
+	onModuleNeeded?: (moduleName: string) => Promise<void>;
+
 	constructor(rootDir: string, config: ServerConfig) {
     this.rootDir = rootDir;
 		this.app = express();
@@ -40,6 +51,31 @@ class Server {
 		this.config = config;
 		this.clientMap = new Map();
 		this.trackedClients = [];
+	}
+
+	private triggerHelperLoads(body: { modules?: unknown; layout?: unknown }): void {
+		if (!this.onModuleNeeded) return;
+		const names: string[] = [];
+		if (Array.isArray(body.modules)) {
+			for (const m of body.modules as ModuleDefinition[]) {
+				if (m.module && !names.includes(m.module)) names.push(m.module);
+			}
+		} else if (body.layout && typeof body.layout === "object") {
+			const layout = body.layout as ClientLayout;
+			const all = [...(layout.fixed ?? []), ...(layout.pages ?? []).flatMap((p) => p.modules ?? [])];
+			for (const m of all) {
+				if (m.module && !names.includes(m.module)) names.push(m.module);
+			}
+		}
+		for (const name of names) {
+			this.onModuleNeeded(name).catch((err) => console.error(`Failed to load helper ${name}: ${err}`));
+		}
+	}
+
+	private rowToConfig(row: { modules: string; layout: string | null }, name: string): object {
+		const base: Record<string, unknown> = { name, modules: JSON.parse(row.modules) as unknown[] };
+		if (row.layout) base.layout = JSON.parse(row.layout) as unknown;
+		return base;
 	}
 
 	/**
@@ -95,18 +131,19 @@ class Server {
 			next();
 		};
 
+
 		const readUserConfig = (username: string, clientName?: string): object => {
 			const db = getDb();
 			if (clientName) {
 				const row = db.select().from(userConfigsTable)
 					.where(and(eq(userConfigsTable.username, username), eq(userConfigsTable.clientName, clientName)))
 					.get();
-				if (row) return { name: username, modules: JSON.parse(row.modules) as unknown[] };
+				if (row) return this.rowToConfig(row, username);
 			}
 			const globalRow = db.select().from(userConfigsTable)
 				.where(and(eq(userConfigsTable.username, username), eq(userConfigsTable.clientName, "")))
 				.get();
-			if (globalRow) return { name: username, modules: JSON.parse(globalRow.modules) as unknown[] };
+			if (globalRow) return this.rowToConfig(globalRow, username);
 			return { name: username, modules: [] };
 		};
 
@@ -114,10 +151,21 @@ class Server {
 			const db = getDb();
 			const clientNameVal = clientName ?? "";
 			db.insert(userConfigsTable)
-				.values({ username, clientName: clientNameVal, modules: JSON.stringify(modules) })
+				.values({ username, clientName: clientNameVal, modules: JSON.stringify(modules), layout: null })
 				.onConflictDoUpdate({
 					target: [userConfigsTable.username, userConfigsTable.clientName],
-					set: { modules: JSON.stringify(modules) },
+					set: { modules: JSON.stringify(modules), layout: null },
+				})
+				.run();
+		};
+
+		const writeUserLayout = (username: string, layout: unknown, clientName: string): void => {
+			const db = getDb();
+			db.insert(userConfigsTable)
+				.values({ username, clientName, modules: "[]", layout: JSON.stringify(layout) })
+				.onConflictDoUpdate({
+					target: [userConfigsTable.username, userConfigsTable.clientName],
+					set: { layout: JSON.stringify(layout) },
 				})
 				.run();
 		};
@@ -163,8 +211,6 @@ class Server {
 		// returns all module names that logged in user is able to use
 		// its divided by admin only and the rest
 		this.app.get("/user/modules/available", requireAuth, (_req, res) => {
-			//TODO Bring the adminOnly modules Set outside this endpoints
-			//also the set is wrong. User should be able to use/not use alert
 			const adminOnly = new Set([
 				"alert",
 				"clientDetailes",
@@ -172,11 +218,22 @@ class Server {
 				"userManager",
 				"personalization",
 			]);
-			const userDefaultModules = ["clock", "dbbutton"].filter((m) => !adminOnly.has(m));
+
+			const modulesDir = path.join(this.rootDir, "modules");
+
+			let defaultModules: string[] = [];
+			try {
+				const defaultDir = path.join(modulesDir, "default");
+				defaultModules = fs.readdirSync(defaultDir).filter((name) => {
+					if (adminOnly.has(name)) return false;
+					return fs.statSync(path.join(defaultDir, name)).isDirectory();
+				});
+			} catch {
+				/* no default modules dir */
+			}
 
 			let thirdParty: string[] = [];
 			try {
-				const modulesDir = path.join(this.rootDir, "modules");
 				thirdParty = fs.readdirSync(modulesDir).filter((name) => {
 					if (name === "default") return false;
 					return fs.statSync(path.join(modulesDir, name)).isDirectory();
@@ -185,42 +242,135 @@ class Server {
 				/* no modules dir */
 			}
 
-			res.json([...userDefaultModules, ...thirdParty]);
+			res.json([...defaultModules, ...thirdParty]);
 		});
 
-		// set users general config
+		// returns a module's manifest (module.json) so the client can read its config schema
+		this.app.get("/modules/manifest/:name", (req, res) => {
+			const { name } = req.params as { name: string };
+			const candidates = [
+				path.join(this.rootDir, "modules", "default", name, "module.json"),
+				path.join(this.rootDir, "modules", name, "module.json"),
+			];
+			for (const p of candidates) {
+				if (fs.existsSync(p)) {
+					try {
+						res.json(JSON.parse(fs.readFileSync(p, "utf8")) as object);
+					} catch {
+						res.status(500).json({ error: "Failed to read manifest" });
+					}
+					return;
+				}
+			}
+			res.json({});
+		});
+
+		// set users general config (flat modules or paged layout)
 		this.app.put("/user/config", requireAuth, (req, res) => {
 			const { username } = (req as express.Request & { sessionInfo: { username: string } })
 				.sessionInfo;
-			const body = req.body as { modules?: unknown };
-			if (!Array.isArray(body.modules)) {
-				res.status(400).json({ error: "modules must be an array" });
-				return;
-			}
+			const body = req.body as { modules?: unknown; layout?: unknown };
 			try {
-				writeUserConfig(username, body.modules as unknown[]);
+				if (body.layout !== undefined) {
+					if (!body.layout || typeof body.layout !== "object" || !Array.isArray((body.layout as Record<string, unknown>).pages)) {
+						res.status(400).json({ error: "layout must be a ClientLayout object with a pages array" });
+						return;
+					}
+					writeUserLayout(username, body.layout, "");
+				} else {
+					if (!Array.isArray(body.modules)) {
+						res.status(400).json({ error: "modules must be an array" });
+						return;
+					}
+					writeUserConfig(username, body.modules as unknown[]);
+				}
 				res.json({ ok: true });
+				this.triggerHelperLoads(body);
 			} catch {
 				res.status(500).json({ error: "Failed to save config" });
 			}
 		});
 
-		// set users config on a specific client
+		// set users config on a specific client (flat modules or paged layout)
 		this.app.put("/user/config/:client", requireAuth, (req, res) => {
 			const { username } = (req as express.Request & { sessionInfo: { username: string } })
 				.sessionInfo;
 			const clientName = req.params["client"] as string;
-			const body = req.body as { modules?: unknown };
-			if (!Array.isArray(body.modules)) {
-				res.status(400).json({ error: "modules must be an array" });
-				return;
-			}
+			const body = req.body as { modules?: unknown; layout?: unknown };
 			try {
-				writeUserConfig(username, body.modules as unknown[], clientName);
+				if (body.layout !== undefined) {
+					if (!body.layout || typeof body.layout !== "object" || !Array.isArray((body.layout as Record<string, unknown>).pages)) {
+						res.status(400).json({ error: "layout must be a ClientLayout object with a pages array" });
+						return;
+					}
+					writeUserLayout(username, body.layout, clientName);
+				} else {
+					if (!Array.isArray(body.modules)) {
+						res.status(400).json({ error: "modules must be an array" });
+						return;
+					}
+					writeUserConfig(username, body.modules as unknown[], clientName);
+				}
 				res.json({ ok: true });
+				this.triggerHelperLoads(body);
 			} catch {
 				res.status(500).json({ error: "Failed to save config" });
 			}
+		});
+
+		// Send a page command to a connected client.
+		// Allowed when: admin role, OR mirror is in default mode, OR requester is the mirror's active user.
+		this.app.post("/clients/:client/page-command", requireAuth, (req, res) => {
+			const session = (req as express.Request & { sessionInfo: { username: string; role: string } }).sessionInfo;
+			const clientName = req.params["client"] as string;
+			const db = getDb();
+
+			const exists = db.select({ name: clientsTable.name })
+				.from(clientsTable).where(eq(clientsTable.name, clientName)).get();
+			if (!exists) { res.status(404).json({ error: "Client not found" }); return; }
+
+			// Permission: admin always allowed; otherwise check the mirror's live current user
+			const trackedClient = this.trackedClients.find((c) => c.name === clientName);
+			const currentUser = trackedClient?.user ?? "default";
+
+			if (
+				session.role !== "admin" &&
+				currentUser !== "default" &&
+				session.username !== currentUser
+			) {
+				res.status(403).json({ error: "Not authorized to control this client" });
+				return;
+			}
+
+			const socket = this.clientMap.get(clientName);
+			if (!socket) { res.status(503).json({ error: "Client not connected" }); return; }
+
+			const VALID_ACTIONS = new Set([
+				"select", "next", "prev", "home",
+				"showHidden", "leaveHidden",
+				"pauseRotation", "resumeRotation",
+			]);
+			const body = req.body as { action?: string; page?: unknown; name?: unknown };
+
+			if (!body.action || !VALID_ACTIONS.has(body.action)) {
+				res.status(400).json({ error: `action must be one of: ${[...VALID_ACTIONS].join(", ")}` });
+				return;
+			}
+			if (body.action === "select" && (typeof body.page !== "number" || !Number.isInteger(body.page))) {
+				res.status(400).json({ error: "select requires an integer 'page' field" });
+				return;
+			}
+			if (body.action === "showHidden" && typeof body.name !== "string") {
+				res.status(400).json({ error: "showHidden requires a string 'name' field" });
+				return;
+			}
+
+			socket.emit("PAGE_COMMAND", {
+				action: body.action,
+				...(body.action === "select" ? { page: body.page as number } : {}),
+				...(body.action === "showHidden" ? { name: body.name as string } : {}),
+			});
+			res.json({ ok: true });
 		});
 	}
 
@@ -328,7 +478,7 @@ class Server {
 			res.json({ ok: true });
 		});
 
-		// get a single client's config (type, userSwitchMode, defaultModules)
+		// get a single client's config (type, userSwitchMode, defaultModules, layout)
 		this.app.get("/admin/clients/:client/config", requireAdmin, (req, res) => {
 			const clientName = req.params["client"] as string;
 			const db = getDb();
@@ -337,6 +487,7 @@ class Server {
 				type: clientsTable.type,
 				userSwitchMode: clientsTable.userSwitchMode,
 				defaultModules: clientsTable.defaultModules,
+				layout: clientsTable.layout,
 			}).from(clientsTable).where(eq(clientsTable.name, clientName)).get();
 
 			if (!row) {
@@ -349,6 +500,7 @@ class Server {
 				type: row.type,
 				userSwitchMode: row.userSwitchMode,
 				defaultModules: JSON.parse(row.defaultModules) as unknown[],
+				layout: row.layout ? JSON.parse(row.layout) as ClientLayout : null,
 			});
 		});
 
@@ -364,7 +516,12 @@ class Server {
 				return;
 			}
 
-			const body = req.body as { type?: string; userSwitchMode?: string; defaultModules?: unknown[] };
+			const body = req.body as {
+				type?: string;
+				userSwitchMode?: string;
+				defaultModules?: unknown[];
+				layout?: ClientLayout | null;
+			};
 
 			if (body.type !== undefined && body.type !== "mirror" && body.type !== "dashboard") {
 				res.status(400).json({ error: "type must be 'mirror' or 'dashboard'" });
@@ -378,11 +535,22 @@ class Server {
 				res.status(400).json({ error: "defaultModules must be an array" });
 				return;
 			}
+			if (body.layout !== undefined && body.layout !== null && typeof body.layout !== "object") {
+				res.status(400).json({ error: "layout must be an object or null" });
+				return;
+			}
+			if (body.layout !== null && body.layout !== undefined) {
+				if (!Array.isArray(body.layout.pages) || !Array.isArray(body.layout.fixed)) {
+					res.status(400).json({ error: "layout must have pages (array) and fixed (array)" });
+					return;
+				}
+			}
 
-			const patch: { type?: string; userSwitchMode?: string; defaultModules?: string } = {};
+			const patch: { type?: string; userSwitchMode?: string; defaultModules?: string; layout?: string | null } = {};
 			if (body.type !== undefined) patch.type = body.type;
 			if (body.userSwitchMode !== undefined) patch.userSwitchMode = body.userSwitchMode;
 			if (body.defaultModules !== undefined) patch.defaultModules = JSON.stringify(body.defaultModules);
+			if (body.layout !== undefined) patch.layout = body.layout === null ? null : JSON.stringify(body.layout);
 
 			if (Object.keys(patch).length === 0) {
 				res.status(400).json({ error: "No valid fields provided" });
@@ -392,9 +560,21 @@ class Server {
 			db.update(clientsTable).set(patch).where(eq(clientsTable.name, clientName)).run();
 			res.json({ ok: true });
 		});
+
 	}
 
 	userServiceEndpoints(): void {
+		// Serve the effective layout for a client — from DB layout column if set,
+		// otherwise synthesised from the legacy defaultModules column.
+		this.app.get("/:client/layout", (req, res) => {
+			const clientName = req.params["client"] as string;
+			const db = getDb();
+			const row = db.select({ layout: clientsTable.layout, defaultModules: clientsTable.defaultModules })
+				.from(clientsTable).where(eq(clientsTable.name, clientName)).get();
+			if (!row) { res.status(404).json({ error: "Client not found" }); return; }
+			res.json(resolveLayout(row));
+		});
+
 		this.app.post("/get-user/:userName", (req, res) => {
 			const userName = req.params.userName;
 			let clientName = "";
@@ -409,18 +589,12 @@ class Server {
 					const row = db.select().from(userConfigsTable)
 						.where(and(eq(userConfigsTable.username, userName), eq(userConfigsTable.clientName, clientName)))
 						.get();
-					if (row) {
-						res.json({ name: userName, modules: JSON.parse(row.modules) as unknown[] });
-						return;
-					}
+					if (row) { res.json(this.rowToConfig(row, userName)); return; }
 				}
 				const globalRow = db.select().from(userConfigsTable)
 					.where(and(eq(userConfigsTable.username, userName), eq(userConfigsTable.clientName, "")))
 					.get();
-				if (globalRow) {
-					res.json({ name: userName, modules: JSON.parse(globalRow.modules) as unknown[] });
-					return;
-				}
+				if (globalRow) { res.json(this.rowToConfig(globalRow, userName)); return; }
 				res.status(404).json({ error: "User config not found" });
 			});
 		});
@@ -509,6 +683,11 @@ class Server {
 				connectedAt: client.connectedAt?.getTime() ?? null,
 				connections: JSON.stringify(client.connections),
 			}).where(eq(clientsTable.name, client.name)).run();
+
+			const layoutRow = db.select({ layout: clientsTable.layout, defaultModules: clientsTable.defaultModules })
+				.from(clientsTable).where(eq(clientsTable.name, clientName)).get();
+			if (layoutRow) socket.emit("LAYOUT", resolveLayout(layoutRow));
+
 			this.pushTrackersToRoot();
 
 			let missedHeartbeats = 0;

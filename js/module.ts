@@ -40,11 +40,52 @@ export class Module {
 
 	async start(): Promise<void> {}
 
+	getTemplate(): string {
+		return "";
+	}
+
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	getTemplateData(): Record<string, any> {
+		return {};
+	}
+
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	nunjucksEnvironment(): any {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const self = this as any;
+		if (!self._nunjucksEnvironment) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const nj = (window as any).nunjucks;
+			if (!nj) throw new Error(`[${this.name}] nunjucks not loaded — add it to getScripts()`);
+			self._nunjucksEnvironment = new nj.Environment(
+				new nj.WebLoader(this.data["path"] as string, { async: true, useCache: true }),
+				{ autoescape: true },
+			);
+		}
+		return self._nunjucksEnvironment;
+	}
+
 	createDom(): HTMLElement | Promise<HTMLElement> {
+		const template = this.getTemplate();
+		if (template) {
+			return new Promise((resolve) => {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				this.nunjucksEnvironment().render(template, this.getTemplateData(), (err: Error | null, result: string) => {
+					const wrapper = document.createElement("div");
+					if (err) {
+						console.error(`[${this.name}] Template render error:`, err);
+						wrapper.innerHTML = `<span class="dimmed">Template error: ${err.message}</span>`;
+					} else {
+						wrapper.innerHTML = result ?? "";
+					}
+					resolve(wrapper);
+				});
+			});
+		}
 		return document.createElement("div");
 	}
 
-	notificationReceived(notification: string, payload: unknown, sender?: Module): void {
+	notificationReceived(notification: string, _payload: unknown, sender?: Module): void {
 		if (sender) {
 			console.log(`${this.name} received module notification: ${notification} from ${sender.name}`);
 		} else {

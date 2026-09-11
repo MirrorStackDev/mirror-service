@@ -59,23 +59,42 @@ class Core {
 		this.moduleHelpers = [];
 	}
 
+	extractModulesFromRow(modulesJson: string, layoutJson: string | null | undefined): ModuleDefinition[] {
+		const flat = JSON.parse(modulesJson) as ModuleDefinition[];
+		if (!layoutJson) return flat;
+		try {
+			const layout = JSON.parse(layoutJson) as { pages?: { modules?: ModuleDefinition[] }[]; fixed?: ModuleDefinition[] };
+			const fromLayout = [
+				...(layout.fixed ?? []),
+				...(layout.pages ?? []).flatMap((p) => p.modules ?? []),
+			];
+			const merged = [...flat];
+			for (const m of fromLayout) {
+				if (!merged.some((x) => x.module === m.module)) merged.push(m);
+			}
+			return merged;
+		} catch {
+			return flat;
+		}
+	}
+
 	getUsersPerClient(client: string, users: string[]): UserObj[] {
 		const db = getDb();
 		return users.map((user) => {
-			const clientRow = db.select({ modules: userConfigsTable.modules })
+			const clientRow = db.select({ modules: userConfigsTable.modules, layout: userConfigsTable.layout })
 				.from(userConfigsTable)
 				.where(and(eq(userConfigsTable.username, user), eq(userConfigsTable.clientName, client)))
 				.get();
 			if (clientRow) {
-				return { path: "", data: { name: user, modules: JSON.parse(clientRow.modules) as ModuleDefinition[] } };
+				return { path: "", data: { name: user, modules: this.extractModulesFromRow(clientRow.modules, clientRow.layout) } };
 			}
-			const globalRow = db.select({ modules: userConfigsTable.modules })
+			const globalRow = db.select({ modules: userConfigsTable.modules, layout: userConfigsTable.layout })
 				.from(userConfigsTable)
 				.where(and(eq(userConfigsTable.username, user), eq(userConfigsTable.clientName, "")))
 				.get();
 			return {
 				path: "",
-				data: { name: user, modules: globalRow ? JSON.parse(globalRow.modules) as ModuleDefinition[] : [] },
+				data: { name: user, modules: globalRow ? this.extractModulesFromRow(globalRow.modules, globalRow.layout) : [] },
 			};
 		});
 	}
@@ -86,7 +105,7 @@ class Core {
 		const modulesInMirrors: ClientModuleMap = {};
 
 		for (const client of this.config.clientConfigs) {
-			const row = db.select({ defaultModules: clientsTable.defaultModules })
+			const row = db.select({ defaultModules: clientsTable.defaultModules, layout: clientsTable.layout })
 				.from(clientsTable)
 				.where(eq(clientsTable.name, client))
 				.get();
@@ -98,7 +117,7 @@ class Core {
 
 			let defaultModules: ModuleDefinition[];
 			try {
-				defaultModules = JSON.parse(row.defaultModules) as ModuleDefinition[];
+				defaultModules = this.extractModulesFromRow(row.defaultModules, row.layout);
 			} catch {
 				console.error(`Error parsing defaultModules for ${client}`);
 				continue;
@@ -263,6 +282,55 @@ class Core {
 		}
 	}
 
+	async ensureHelperLoaded(moduleName: string): Promise<void> {
+		if (this.moduleHelpers.some(({ helper }) => helper.name === moduleName)) return;
+
+		const moduleFolder = this.config.providedModules.includes(moduleName)
+			? `${this.rootDir}/modules/default/${moduleName}`
+			: `${this.rootDir}/modules/${moduleName}`;
+
+		let manifest: ModuleManifest | null = null;
+		if (!this.config.providedModules.includes(moduleName)) {
+			manifest = this.loadAndValidateManifest(moduleFolder, moduleName);
+			if (!manifest) return;
+		}
+
+		const helperPath = `${moduleFolder}/helper.js`;
+		try {
+			fs.accessSync(helperPath, fs.constants.R_OK);
+		} catch {
+			return;
+		}
+
+		console.log(`Starting helper for module: ${moduleName} (on-demand)`);
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const HelperClass = require(helperPath.slice(0, -3)) as typeof Helper;
+		const helper = new HelperClass();
+		helper.setName(moduleName);
+		helper.setPath(moduleFolder);
+		this.moduleHelpers.push({ helper, manifest });
+		helper.loaded();
+
+		const hasPermission = (perm: HelperPermission): boolean =>
+			manifest === null || manifest.helper.permissions.includes(perm);
+
+		if (hasPermission("express.route")) {
+			const router = Router();
+			this.expressApp.use(`/${helper.name}`, router);
+			helper.setExpressApp(router);
+		}
+		if (hasPermission("socket.namespace")) {
+			const namespace = this.socketio.of(helper.name);
+			helper.setSocketIO(namespace);
+		}
+
+		try {
+			await helper.start();
+		} catch (error) {
+			console.error(`Error starting on-demand helper for ${moduleName}: ${error}`);
+		}
+	}
+
 	async start(): Promise<void> {
 		fs.mkdirSync(path.join(this.rootDir, "workData"), { recursive: true });
 		initDb(path.join(this.rootDir, "workData/mirror.db"));
@@ -275,6 +343,8 @@ class Core {
 
 		this.expressApp = apps.app;
 		this.socketio = apps.io;
+
+		this.httpServer.onModuleNeeded = (name: string) => this.ensureHelperLoaded(name);
 
 		this.loadModules();
 

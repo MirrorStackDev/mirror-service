@@ -22,9 +22,13 @@
 		},
         {
             "module": "clientDetailes",
-            "config": {
-
-            }
+            "position": "middle_center",
+            "config": {}
+        },
+        {
+            "module": "userManager",
+            "position": "lower_third",
+            "config": {}
         }
 	]
 }

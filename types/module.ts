@@ -39,6 +39,22 @@ export interface ModuleInfo {
 	header?: string;
 	config?: Record<string, unknown>;
 	classes: string;
+	// Page this module belongs to: page index, "fixed" (always visible), or hidden-page name
+	pageKey?: number | "fixed" | string;
+}
+
+export interface Page {
+	name?: string;
+	modules: ModuleDefinition[];
+	rotationMs?: number;
+}
+
+export interface ClientLayout {
+	pages: Page[];
+	fixed: ModuleDefinition[];
+	hiddenPages?: Record<string, ModuleDefinition[]>;
+	homePage?: number;
+	rotationMs?: number;
 }
 
 export interface ClientConfig {

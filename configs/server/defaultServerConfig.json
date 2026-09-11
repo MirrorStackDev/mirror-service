@@ -38,5 +38,5 @@
 
   "rootConf": "root",
   "clientConfigs": [],
-  "providedModules": ["clock", "dbbutton", "clientDisplay", "clientDetailes", "alert"]
+  "providedModules": ["clock", "dbbutton", "clientDisplay", "clientDetailes", "alert", "calendar", "weather", "personalization"]
 }

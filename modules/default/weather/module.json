@@ -1,0 +1,80 @@
+{
+	"name": "weather",
+	"helper": {
+		"permissions": ["socket.namespace"]
+	},
+	"client": {
+		"permissions": ["notifications.send"]
+	},
+	"config": [
+		{
+			"key": "weatherProvider",
+			"type": "select",
+			"default": "openmeteo",
+			"label": "Provider",
+			"options": ["openmeteo"]
+		},
+		{
+			"key": "type",
+			"type": "select",
+			"default": "current",
+			"label": "Display type",
+			"options": ["current", "forecast", "hourly"]
+		},
+		{ "key": "lat", "type": "number", "default": 0, "label": "Latitude" },
+		{ "key": "lon", "type": "number", "default": 0, "label": "Longitude" },
+		{
+			"key": "units",
+			"type": "select",
+			"default": "metric",
+			"label": "Units",
+			"options": ["metric", "imperial"]
+		},
+		{
+			"key": "tempUnits",
+			"type": "select",
+			"default": "metric",
+			"label": "Temp units",
+			"options": ["metric", "imperial"]
+		},
+		{
+			"key": "windUnits",
+			"type": "select",
+			"default": "metric",
+			"label": "Wind units",
+			"options": ["metric", "imperial", "beaufort", "kmh", "knots"]
+		},
+		{
+			"key": "timeFormat",
+			"type": "select",
+			"default": 24,
+			"label": "Time format",
+			"options": [12, 24]
+		},
+		{ "key": "maxNumberOfDays", "type": "number", "default": 5, "label": "Days (forecast)" },
+		{ "key": "maxEntries", "type": "number", "default": 5, "label": "Max entries (hourly)" },
+		{ "key": "roundTemp", "type": "boolean", "default": false, "label": "Round temperature" },
+		{ "key": "showFeelsLike", "type": "boolean", "default": true, "label": "Feels like" },
+		{
+			"key": "showHumidity",
+			"type": "select",
+			"default": "none",
+			"label": "Humidity",
+			"options": [
+				{ "value": "none", "label": "Hidden" },
+				{ "value": "wind", "label": "Next to wind" },
+				{ "value": "temp", "label": "Next to temp" },
+				{ "value": "feelslike", "label": "Next to feels like" },
+				{ "value": "below", "label": "Below" }
+			]
+		},
+		{ "key": "showSun", "type": "boolean", "default": true, "label": "Show sun" },
+		{ "key": "showWindDirection", "type": "boolean", "default": true, "label": "Wind direction" },
+		{ "key": "showPrecipitationAmount", "type": "boolean", "default": false, "label": "Precip amount" },
+		{ "key": "showPrecipitationProbability", "type": "boolean", "default": false, "label": "Precip probability" },
+		{ "key": "showUVIndex", "type": "boolean", "default": false, "label": "UV index" },
+		{ "key": "degreeLabel", "type": "boolean", "default": false, "label": "Degree label (°C/°F)" },
+		{ "key": "fade", "type": "boolean", "default": true, "label": "Fade" },
+		{ "key": "colored", "type": "boolean", "default": false, "label": "Colored" }
+	]
+}

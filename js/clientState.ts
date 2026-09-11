@@ -1,9 +1,10 @@
-import type { ClientConfig, ModuleDefinition } from "../types/module.js";
+import type { ClientConfig, ClientLayout, ModuleDefinition } from "../types/module.js";
 import type { SessionInfo } from "../types/index.js";
 
 export interface ActiveConfig {
 	name: string;
 	modules: ModuleDefinition[];
+	layout?: ClientLayout;
 }
 
 // Minimal interface for what module.ts needs from Client, avoids circular import
@@ -60,3 +61,4 @@ export function setSession(s: SessionInfo | null): void {
 export function getSession(): SessionInfo | null {
 	return _session;
 }
+
