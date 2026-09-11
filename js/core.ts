@@ -12,6 +12,7 @@ import { initDb, getDb } from "./db/index.js";
 import { clients as clientsTable, clientUsers as clientUsersTable, userConfigs as userConfigsTable } from "./db/schema.js";
 
 import type { ServerConfig } from "../types/config.js";
+import { log } from "./logger.js";
 import type { ModuleDefinition, UserConfig } from "../types/module.js";
 import type { ModuleManifest, HelperPermission } from "../types/index.js";
 
@@ -26,10 +27,19 @@ export type ClientModuleMap = Record<
 
 type LoadedHelper = { helper: Helper; manifest: ModuleManifest | null };
 
+// Modules that ship with the codebase and have no module.json — granted all permissions implicitly.
+// Keep this list small and only add truly in-house modules here.
+const coreModules = new Set([
+	"alert", "clock", "dbbutton",
+	"clientDisplay", "clientDetailes",
+	"personalization", "personalUserSwitcher", "userManager",
+]);
+
 class Core {
 	rootDir: string;
 	config: ServerConfig;
 	moduleHelpers: LoadedHelper[];
+	defaultModuleNames: string[] = [];
 	allClients!: ClientModuleMap;
 	diffModules!: string[];
 	httpServer!: Server;
@@ -52,9 +62,10 @@ class Core {
 				JSON.parse(rawConfig) as Partial<ServerConfig>,
 			);
 		} else {
-			console.warn("Warning: No custom server config found");
 			this.config = merge({ rootDir: this.rootDir }, defaults);
+			log.warn("Core", "No custom serverConfig.json found, using defaults.");
 		}
+		log.configure(this.config.logLevel);
 
 		this.moduleHelpers = [];
 	}
@@ -100,7 +111,6 @@ class Core {
 	}
 
 	createModuleArray(): ClientModuleMap {
-		console.log("Searching for modules");
 		const db = getDb();
 		const modulesInMirrors: ClientModuleMap = {};
 
@@ -111,7 +121,7 @@ class Core {
 				.get();
 
 			if (!row) {
-				console.error(`No DB record for client ${client}, skipping`);
+				log.error("Core", `No DB record for client ${client}, skipping`);
 				continue;
 			}
 
@@ -119,7 +129,7 @@ class Core {
 			try {
 				defaultModules = this.extractModulesFromRow(row.defaultModules, row.layout);
 			} catch {
-				console.error(`Error parsing defaultModules for ${client}`);
+				log.error("Core", `Error parsing defaultModules for ${client}`);
 				continue;
 			}
 
@@ -137,8 +147,18 @@ class Core {
 		return modulesInMirrors;
 	}
 
+	scanDefaultModules(): string[] {
+		const defaultDir = path.join(this.rootDir, "modules", "default");
+		try {
+			return fs.readdirSync(defaultDir).filter((name) =>
+				fs.statSync(path.join(defaultDir, name)).isDirectory(),
+			);
+		} catch {
+			return [];
+		}
+	}
+
 	differentModules(): string[] {
-		console.log("Finding all unique modules");
 		const diffs: string[] = [];
 
 		for (const client in this.allClients) {
@@ -162,7 +182,7 @@ class Core {
 		try {
 			raw = fs.readFileSync(manifestPath, "utf8");
 		} catch {
-			console.warn(`[Security] ${moduleName}: module.json missing — helper will not load`);
+			log.warn("Security", `${moduleName}: module.json missing — helper will not load`);
 			return null;
 		}
 
@@ -170,9 +190,7 @@ class Core {
 		try {
 			manifest = JSON.parse(raw) as ModuleManifest;
 		} catch {
-			console.warn(
-				`[Security] ${moduleName}: module.json is not valid JSON — helper will not load`,
-			);
+			log.warn("Security", `${moduleName}: module.json is not valid JSON — helper will not load`);
 			return null;
 		}
 
@@ -189,32 +207,27 @@ class Core {
 		const unknown = declared.filter((p) => !knownPermissions.has(p));
 
 		if (unknown.length > 0) {
-			console.warn(
-				`[Security] ${moduleName}: unknown permissions [${unknown.join(", ")}] — rejecting manifest, helper will not load`,
-			);
+			log.warn("Security", `${moduleName}: unknown permissions [${unknown.join(", ")}] — rejecting manifest`);
 			return null;
 		}
 
-		console.log(
-			`[Security] ${moduleName}: manifest valid, granted [${declared.join(", ") || "none"}]`,
-		);
+		log.info("Security", `${moduleName}: granted [${declared.join(", ") || "none"}]`);
 		return manifest;
 	}
 
 	loadModules(): void {
-		console.log("Loading modules");
 		this.allClients = this.createModuleArray();
 		this.diffModules = this.differentModules();
 
 		for (const moduleName of this.diffModules) {
-			const moduleFolder = this.config.providedModules.includes(moduleName)
+			const moduleFolder = this.defaultModuleNames.includes(moduleName)
 				? `${this.rootDir}/modules/default/${moduleName}`
 				: `${this.rootDir}/modules/${moduleName}`;
 
 			const moduleFile = `${moduleFolder}/${moduleName}.js`;
 
 			let manifest: ModuleManifest | null = null;
-			if (!this.config.providedModules.includes(moduleName)) {
+			if (!coreModules.has(moduleName)) {
 				manifest = this.loadAndValidateManifest(moduleFolder, moduleName);
 				if (!manifest) continue;
 			}
@@ -222,7 +235,7 @@ class Core {
 			try {
 				fs.accessSync(moduleFile, fs.constants.R_OK);
 			} catch {
-				console.log(`No ${moduleFile} found for module ${moduleName}.`);
+				log.debug("Core", `No module file found for ${moduleName}`);
 			}
 
 			const helperPath = `${moduleFolder}/helper.js`;
@@ -231,11 +244,10 @@ class Core {
 				fs.accessSync(helperPath, fs.constants.R_OK);
 			} catch {
 				helperExists = false;
-				console.log(`No helper found for module ${moduleName}`);
 			}
 
 			if (helperExists) {
-				console.log(`Starting helper for module: ${moduleName}`);
+				log.info("Core", `Starting helper: ${moduleName}`);
 				// eslint-disable-next-line @typescript-eslint/no-require-imports
 				const HelperClass = require(helperPath.slice(0, -3)) as typeof Helper;
 				const helper = new HelperClass();
@@ -249,20 +261,19 @@ class Core {
 	}
 
 	checkMirrorConfigs(): void {
-		console.log("Checking if configs are correct");
 
 		const clients = this.config.clientConfigs;
 		for (const client of clients) {
 			const folder = path.join(this.rootDir, "configs", client);
 			if (!fs.existsSync(folder)) {
-				console.error("No folder for defined client in config!");
+				log.error("Core", `No folder found for client '${client}' — removing from config`);
 				const index = this.config.clientConfigs.indexOf(client);
 				this.config.clientConfigs.splice(index, 1);
 				continue;
 			}
 
 			if (!fs.existsSync(path.join(folder, `${client}.js`))) {
-				console.log(`Creating .js file for client: ${client}`);
+				log.info("Core", `Creating entry JS for client: ${client}`);
 				fs.copyFileSync(
 					path.join(this.rootDir, "js/mirror.js"),
 					path.join(folder, `${client}.js`),
@@ -273,7 +284,7 @@ class Core {
 		const rootConfFolder = path.join(this.rootDir, "configs", this.config.rootConf);
 		if (fs.existsSync(rootConfFolder)) {
 			if (!fs.existsSync(path.join(rootConfFolder, `${this.config.rootConf}.js`))) {
-				console.log(`Creating .js file for client: ${this.config.rootConf}`);
+				log.info("Core", `Creating entry JS for root: ${this.config.rootConf}`);
 				fs.copyFileSync(
 					path.join(this.rootDir, "js/mirror.js"),
 					path.join(rootConfFolder, `${this.config.rootConf}.js`),
@@ -285,12 +296,12 @@ class Core {
 	async ensureHelperLoaded(moduleName: string): Promise<void> {
 		if (this.moduleHelpers.some(({ helper }) => helper.name === moduleName)) return;
 
-		const moduleFolder = this.config.providedModules.includes(moduleName)
+		const moduleFolder = this.defaultModuleNames.includes(moduleName)
 			? `${this.rootDir}/modules/default/${moduleName}`
 			: `${this.rootDir}/modules/${moduleName}`;
 
 		let manifest: ModuleManifest | null = null;
-		if (!this.config.providedModules.includes(moduleName)) {
+		if (!coreModules.has(moduleName)) {
 			manifest = this.loadAndValidateManifest(moduleFolder, moduleName);
 			if (!manifest) return;
 		}
@@ -302,7 +313,7 @@ class Core {
 			return;
 		}
 
-		console.log(`Starting helper for module: ${moduleName} (on-demand)`);
+		log.info("Core", `Starting helper on-demand: ${moduleName}`);
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const HelperClass = require(helperPath.slice(0, -3)) as typeof Helper;
 		const helper = new HelperClass();
@@ -327,7 +338,7 @@ class Core {
 		try {
 			await helper.start();
 		} catch (error) {
-			console.error(`Error starting on-demand helper for ${moduleName}: ${error}`);
+			log.error("Core", `Error starting on-demand helper for ${moduleName}:`, error);
 		}
 	}
 
@@ -344,6 +355,8 @@ class Core {
 		this.expressApp = apps.app;
 		this.socketio = apps.io;
 
+		this.defaultModuleNames = this.scanDefaultModules();
+		this.httpServer.defaultModuleNames = this.defaultModuleNames;
 		this.httpServer.onModuleNeeded = (name: string) => this.ensureHelperLoaded(name);
 
 		this.loadModules();
@@ -376,16 +389,15 @@ class Core {
 			try {
 				helperPromises.push(helper.start());
 			} catch (error) {
-				console.error(`Error when starting helper for module ${helper.name}: ${error}`);
+				log.error("Core", `Error starting helper ${helper.name}:`, error);
 			}
 		}
 
 		const results = await Promise.allSettled(helperPromises);
 		results.forEach((result) => {
-			if (result.status === "rejected") console.log(result.reason);
+			if (result.status === "rejected") log.error("Core", result.reason);
 		});
-		console.log("All helpers started");
-		console.log("Backend has been started");
+		log.info("Core", `Ready — ${this.moduleHelpers.length} helper(s) on port ${this.config.port}`);
 	}
 }
 

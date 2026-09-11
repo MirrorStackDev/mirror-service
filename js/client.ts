@@ -1,4 +1,5 @@
 import { Module } from "./module.js";
+import { log } from "./logger.js";
 import { ClientSocket } from "./clientSocket.js";
 import { UserService } from "./UserService.js";
 import { resetDOM, fetchConfig } from "./utils.js";
@@ -10,6 +11,8 @@ import {
 	setFreshRegions,
 	getConfigInUse,
 	setSession,
+	setDefaultModules,
+	getDefaultModules,
 	type ActiveConfig,
 } from "./clientState.js";
 import type { SessionInfo } from "../types/index.js";
@@ -177,17 +180,6 @@ export class Client {
 	loadedScripts: Set<string> = new Set();
 	users: string[] = [];
 
-	readonly defModules = [
-		"clock",
-		"dbbutton",
-		"clientDisplay",
-		"clientDetailes",
-		"alert",
-		"userManager",
-		"personalization",
-		"calendar",
-		"weather",
-	];
 
 	readonly modulePositions: ModulePosition[] = [
 		"top_bar",
@@ -272,7 +264,7 @@ export class Client {
 				link.href = url;
 				link.onload = () => resolve();
 				link.onerror = () => {
-					console.error("Error loading style:", url);
+					log.error("Client", "Error loading style:", url);
 					resolve();
 				};
 				document.head.appendChild(link);
@@ -288,7 +280,7 @@ export class Client {
 			script.src = url;
 			script.onload = () => resolve();
 			script.onerror = () => {
-				console.error("Error loading script:", url);
+				log.error("Client", "Error loading script:", url);
 				resolve();
 			};
 			document.body.appendChild(script);
@@ -326,7 +318,7 @@ export class Client {
 
 		entries.forEach(({ moduleConfig, pageKey }, index) => {
 			const moduleName = moduleConfig.module;
-			const folder = this.defModules.includes(moduleName)
+			const folder = getDefaultModules().includes(moduleName)
 				? `/modules/default/${moduleName}/`
 				: `/modules/${moduleName}/`;
 
@@ -371,35 +363,29 @@ export class Client {
 		try {
 			const res = await fetch(moduleInfo.folder + "module.json");
 			if (!res.ok) {
-				console.warn(`[Security] ${moduleInfo.name}: module.json missing — module will not load`);
+				log.warn("Security", `${moduleInfo.name}: module.json missing — module will not load`);
 				return null;
 			}
 			manifest = (await res.json()) as ModuleManifest;
 		} catch {
-			console.warn(
-				`[Security] ${moduleInfo.name}: failed to fetch module.json — module will not load`,
-			);
+			log.warn("Security", `${moduleInfo.name}: failed to fetch module.json — module will not load`);
 			return null;
 		}
 
 		const declared = manifest.client?.permissions ?? [];
 		const unknown = declared.filter((p) => !knownPermissions.has(p));
 		if (unknown.length > 0) {
-			console.warn(
-				`[Security] ${moduleInfo.name}: unknown client permissions [${unknown.join(", ")}] — module will not load`,
-			);
+			log.warn("Security", `${moduleInfo.name}: unknown client permissions [${unknown.join(", ")}] — module will not load`);
 			return null;
 		}
 
-		console.log(
-			`[Security] ${moduleInfo.name}: client permissions granted [${declared.join(", ") || "none"}]`,
-		);
+		log.info("Security", `${moduleInfo.name}: client permissions granted [${declared.join(", ") || "none"}]`);
 		return declared;
 	}
 
 	async loadModule(moduleInfo: ModuleInfo): Promise<void> {
 		let permissions: ClientPermission[] = [];
-		if (!this.defModules.includes(moduleInfo.name)) {
+		if (!getDefaultModules().includes(moduleInfo.name)) {
 			const granted = await this.fetchManifest(moduleInfo);
 			if (granted === null) return;
 			permissions = granted;
@@ -410,7 +396,7 @@ export class Client {
 
 		const ModuleClass = (window as unknown as Record<string, new () => Module>)[moduleInfo.name];
 		if (!ModuleClass) {
-			console.error(`Module class not found on window: ${moduleInfo.name}`);
+			log.error("Client", `Module class not found on window: ${moduleInfo.name}`);
 			return;
 		}
 		const module = new ModuleClass();
@@ -427,7 +413,7 @@ export class Client {
 			await this.loadFile(styleUrl, "style");
 		}
 		this.moduleObjs.push(module);
-		console.log(`Module loaded: ${module.name}`);
+		log.info("Client", `Module loaded: ${module.name}`);
 	}
 
 	async loadModules(): Promise<void> {
@@ -479,7 +465,7 @@ export class Client {
 					this.updateModuleContent(module, newContent);
 				}
 			})
-			.catch((err) => console.error(err));
+			.catch((err) => log.error("Client", err));
 	}
 
 	sendNotification(notification: string, payload: unknown, sender: Module, sendTo?: Module): void {
@@ -605,6 +591,9 @@ export async function startClient(): Promise<void> {
 		const clientConfig = (await fetchConfig()) as ClientConfig;
 		setClientConfig(clientConfig);
 
+		const defaultModulesRes = await fetch("/config/default-modules");
+		setDefaultModules(defaultModulesRes.ok ? (await defaultModulesRes.json()) as string[] : []);
+
 		let layout: ClientLayout | undefined;
 		let initialModules = clientConfig.defaultModules;
 
@@ -628,7 +617,7 @@ export async function startClient(): Promise<void> {
 				const layoutRes = await fetch(`/${clientConfig.name}/layout`);
 				if (layoutRes.ok) layout = (await layoutRes.json()) as ClientLayout;
 			} catch {
-				console.warn("Could not fetch layout, falling back to defaultModules");
+				log.warn("Client", "Could not fetch layout, falling back to defaultModules");
 			}
 		}
 
@@ -653,6 +642,7 @@ export async function startClient(): Promise<void> {
 		(window as unknown as Record<string, unknown>)["_userService"] = userService;
 
 		await client.init();
+		log.info("Client", `Started: ${clientConfig.name} (${client.moduleObjs.length} modules)`);
 
 		// Initialise page manager after all modules are loaded and in the DOM
 		if (layout) {
@@ -662,6 +652,6 @@ export async function startClient(): Promise<void> {
 			pm.startRotation();
 		}
 	} catch (error) {
-		console.error("Error during client startup:", error);
+		log.error("Client", "Error during startup:", error);
 	}
 }

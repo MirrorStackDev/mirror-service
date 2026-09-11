@@ -14,7 +14,6 @@ export interface ClientRef {
 	showModule(module: unknown, speed: number, callback: () => void, options?: unknown): void;
 	sendNotification(notification: string, payload: unknown, sender: unknown): void;
 	reload(): void;
-	defModules: string[];
 	moduleObjs: unknown[];
 }
 
@@ -22,6 +21,7 @@ let _client: ClientRef | null = null;
 let _clientConfig: ClientConfig | null = null;
 let _configInUse: ActiveConfig | null = null;
 let _freshRegions = "";
+let _defaultModules: string[] = [];
 
 export function setClient(c: ClientRef): void {
 	_client = c;
@@ -52,6 +52,13 @@ export function setFreshRegions(r: string): void {
 }
 export function getFreshRegions(): string {
 	return _freshRegions;
+}
+
+export function setDefaultModules(modules: string[]): void {
+	_defaultModules = modules;
+}
+export function getDefaultModules(): string[] {
+	return _defaultModules;
 }
 
 let _session: SessionInfo | null = null;

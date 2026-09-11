@@ -13,6 +13,7 @@ import { AuthService, COOKIE_NAME } from "./authService.js";
 import { getDb } from "./db/index.js";
 import { clients as clientsTable, clientUsers as clientUsersTable, userConfigs as userConfigsTable } from "./db/schema.js";
 import type { ServerConfig } from "../types/config.js";
+import { log } from "./logger.js";
 import type { ClientLayout, ModuleDefinition } from "../types/module.js";
 import type {
 	ModuleSocketPayload,
@@ -41,6 +42,7 @@ class Server {
 	auth!: AuthService;
 
 	onModuleNeeded?: (moduleName: string) => Promise<void>;
+	defaultModuleNames: string[] = [];
 
 	constructor(rootDir: string, config: ServerConfig) {
     this.rootDir = rootDir;
@@ -68,7 +70,7 @@ class Server {
 			}
 		}
 		for (const name of names) {
-			this.onModuleNeeded(name).catch((err) => console.error(`Failed to load helper ${name}: ${err}`));
+			this.onModuleNeeded(name).catch((err) => log.error("Server", `Failed to load helper ${name}:`, err));
 		}
 	}
 
@@ -85,7 +87,7 @@ class Server {
 		const mirrorName = confName + ".js";
 		fs.readFile(path.join(this.rootDir, "index.html"), "utf8", (err, data) => {
 			if (err) {
-				console.log(err.message);
+				log.error("Server", "Failed to read index.html:", err.message);
 				return;
 			}
 
@@ -102,7 +104,7 @@ class Server {
 				newFile,
 				"utf8",
 				(writeErr) => {
-					if (writeErr) console.log(writeErr.message);
+					if (writeErr) log.error("Server", "Failed to write HTML:", writeErr.message);
 				},
 			);
 		});
@@ -564,6 +566,10 @@ class Server {
 	}
 
 	userServiceEndpoints(): void {
+		this.app.get("/config/default-modules", (_req, res) => {
+			res.json(this.defaultModuleNames);
+		});
+
 		// Serve the effective layout for a client — from DB layout column if set,
 		// otherwise synthesised from the legacy defaultModules column.
 		this.app.get("/:client/layout", (req, res) => {
@@ -642,7 +648,6 @@ class Server {
 					row.currentUser,
 				),
 		);
-		console.log("Client tracker data loaded from DB.");
 	}
 
 	pushTrackersToRoot(): void {
@@ -662,7 +667,7 @@ class Server {
 
 			const client = this.trackedClients.find((c) => c.name === clientName);
 			if (!client) {
-				console.error(`Unknown client connected: ${clientName}`);
+				log.warn("Server", `Unknown client connected: ${clientName} — disconnecting`);
 				socket.disconnect();
 				return;
 			}
@@ -670,6 +675,7 @@ class Server {
 			client.lastOnline = new Date();
 			client.connectedAt = new Date();
 			client.status = "online";
+			log.info("Server", `Client connected: ${clientName}`);
 			if (!client.connections.find((c) => c.ip === clientIp)) {
 				client.connections.push({
 					ip: clientIp,
@@ -697,7 +703,7 @@ class Server {
 				if (client.status === "online") {
 					missedHeartbeats += 1;
 					if (missedHeartbeats >= 4) {
-						console.log(`Client ${client.name} is unresponsive. Disconnecting...`);
+						log.warn("Server", `Client ${client.name} unresponsive — disconnecting`);
 						socket.disconnect();
 						return;
 					}
@@ -709,7 +715,6 @@ class Server {
 
 			socket.on("heartbeat", () => {
 				client.lastOnline = new Date();
-				console.log(`Heartbeat received from ${client.name}`);
 				missedHeartbeats = 0;
 				beats += 1;
 				if (beats === 3) {
@@ -722,28 +727,27 @@ class Server {
 
 			socket.on("retrieveTrackers", () => {
 				if (client.name === "root") {
-					console.log("Root requested client tracker data");
 					socket.emit("trackersData", this.trackedClients);
 				}
 			});
 
 			socket.on("HIDE_MODULE_X", (payload: ModuleSocketPayload) => {
-				console.log(payload);
+				log.debug("Server", "HIDE_MODULE_X", payload);
 				this.clientMap.get(payload.client)?.emit("HIDE_MODULE_Y", payload);
 			});
 
 			socket.on("SHOW_MODULE_X", (payload: ModuleSocketPayload) => {
-				console.log(payload);
+				log.debug("Server", "SHOW_MODULE_X", payload);
 				this.clientMap.get(payload.client)?.emit("SHOW_MODULE_Y", payload);
 			});
 
 			socket.on("SUSPEND_MODULE_X", (payload: ModuleSocketPayload) => {
-				console.log(payload);
+				log.debug("Server", "SUSPEND_MODULE_X", payload);
 				this.clientMap.get(payload.client)?.emit("SUSPEND_MODULE_Y", payload);
 			});
 
 			socket.on("RESUME_MODULE_X", (payload: ModuleSocketPayload) => {
-				console.log(payload);
+				log.debug("Server", "RESUME_MODULE_X", payload);
 				this.clientMap.get(payload.client)?.emit("RESUME_MODULE_Y", payload);
 			});
 
@@ -756,9 +760,7 @@ class Server {
 				const session = token ? this.auth.getSession(token) : null;
 
 				if (!session) {
-					console.warn(
-						`[Security] CHANGE_USER_X rejected — no valid session on socket (client: ${payload.client})`,
-					);
+					log.warn("Security", `CHANGE_USER_X rejected — no valid session (client: ${payload.client})`);
 					return;
 				}
 
@@ -778,7 +780,7 @@ class Server {
 			});
 
 			socket.on("disconnect", () => {
-				console.log(`Client disconnected from server: ${client.name}`);
+				log.info("Server", `Client disconnected: ${client.name}`);
 				const index = client.connections.findIndex((conn) => conn.ip === clientIp);
 				if (index !== -1) {
 					client.connections.splice(index, 1);
@@ -852,7 +854,6 @@ class Server {
 
 	open(): Promise<{ app: express.Application; io: SocketIOServer }> {
 		return new Promise((resolve) => {
-			console.log("Starting express server");
 			if (this.config.https) {
 				const options = {
 					key: fs.readFileSync(this.config.httpsPrivateKey!),
@@ -915,10 +916,15 @@ class Server {
 			this.app.use("/modules", express.static(path.join(this.rootDir, "modules")));
 			this.app.use("/css", express.static(path.join(this.rootDir, "css")));
 			this.app.use("/js", express.static(path.join(this.rootDir, "dist/client")));
+			this.app.use("/fonts/roboto", express.static(path.join(this.rootDir, "node_modules/@fontsource/roboto")));
+			this.app.use("/fonts/roboto-condensed", express.static(path.join(this.rootDir, "node_modules/@fontsource/roboto-condensed")));
 
 			this.userServiceEndpoints();
 
-			this.server.on("listening", () => resolve({ app: this.app, io: this.io }));
+			this.server.on("listening", () => {
+				log.info("Server", `Listening on ${this.config.address || "0.0.0.0"}:${this.port}`);
+				resolve({ app: this.app, io: this.io });
+			});
 		});
 	}
 

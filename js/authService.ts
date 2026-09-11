@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { eq, lt } from "drizzle-orm";
+import { log } from "./logger.js";
 import type { Db } from "./db/index.js";
 import { accounts as accountsTable, sessions as sessionsTable, userConfigs as userConfigsTable } from "./db/schema.js";
 import type { Session, SessionInfo, UserRole } from "../types/auth.js";
@@ -33,9 +34,7 @@ export class AuthService {
 			passwordHash: this.hashPassword("admin", salt),
 			salt,
 		}).run();
-		console.warn(
-			"[Auth] No accounts found. Created default admin/admin account. Change the password immediately.",
-		);
+		log.warn("Auth", "No accounts found. Created default admin/admin — change the password immediately.");
 	}
 
 	private loadSessions(): void {
@@ -45,7 +44,7 @@ export class AuthService {
 		for (const row of rows) {
 			this.sessionCache.set(row.token, row as Session);
 		}
-		console.log(`[Auth] Loaded ${this.sessionCache.size} active session(s).`);
+		log.info("Auth", `Loaded ${this.sessionCache.size} active session(s).`);
 	}
 
 	login(username: string, password: string): Session | null {
@@ -54,8 +53,10 @@ export class AuthService {
 			.from(accountsTable)
 			.where(eq(accountsTable.username, username))
 			.get();
-		if (!account) return null;
-		if (this.hashPassword(password, account.salt) !== account.passwordHash) return null;
+		if (!account || this.hashPassword(password, account.salt) !== account.passwordHash) {
+			log.warn("Auth", `Login failed: ${username}`);
+			return null;
+		}
 
 		const session: Session = {
 			token: crypto.randomUUID(),
@@ -66,6 +67,7 @@ export class AuthService {
 		};
 		this.sessionCache.set(session.token, session);
 		this.db.insert(sessionsTable).values(session).run();
+		log.info("Auth", `Login: ${username} (${account.role})`);
 		return session;
 	}
 

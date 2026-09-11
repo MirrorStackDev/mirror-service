@@ -2,6 +2,7 @@ import { app as eleApp, BrowserWindow, screen } from "electron";
 import fs from "node:fs";
 
 import type { ElectronConfig } from "../types/config.js";
+import { log } from "./logger.js";
 
 // Config
 let config: ElectronConfig;
@@ -10,7 +11,7 @@ if (process.env["config"]) {
 	config = JSON.parse(process.env["config"]) as ElectronConfig;
 } else {
 	if (!fs.existsSync("configs/electron/eleDefaults.json")) {
-		console.error("No default config for electron found!");
+		log.error("Electron", "No default config found!");
 		process.exit(1);
 	}
 	const defaults = JSON.parse(
@@ -36,7 +37,7 @@ function createWindow(): void {
 	try {
 		electronSize = screen.getPrimaryDisplay().workAreaSize;
 	} catch {
-		console.warn("Could not get display size, using defaults ...");
+		log.warn("Electron", "Could not get display size, using defaults.");
 	}
 
 	const switchesDefaults = ["autoplay-policy", "no-user-gesture-required"];
@@ -118,7 +119,7 @@ eleApp.on("activate", () => {
 });
 
 eleApp.on("before-quit", async (event) => {
-	console.log("Shutting down server...");
+	log.info("Electron", "Shutting down server.");
 	event.preventDefault();
 	process.exit(0);
 });
@@ -129,6 +130,6 @@ eleApp.on("certificate-error", (event, _webContents, _url, _error, _certificate,
 });
 
 eleApp.whenReady().then(() => {
-	console.log("Launching client viewer application.");
+	log.info("Electron", "Launching client viewer.");
 	createWindow();
 });

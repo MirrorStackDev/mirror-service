@@ -37,6 +37,5 @@
 	"customCss": "css/custom.css",
 
   "rootConf": "root",
-  "clientConfigs": [],
-  "providedModules": ["clock", "dbbutton", "clientDisplay", "clientDetailes", "alert", "calendar", "weather", "personalization"]
+  "clientConfigs": []
 }

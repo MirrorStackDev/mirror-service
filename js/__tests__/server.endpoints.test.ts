@@ -37,7 +37,6 @@ function buildConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
 		customCss: "",
 		rootConf: "root",
 		clientConfigs: ["bathroom"],
-		providedModules: [],
 	};
 	return { ...base, ...overrides };
 }

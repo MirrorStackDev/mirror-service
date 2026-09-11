@@ -1,4 +1,5 @@
 import express from "express";
+import { log } from "./logger.js";
 import type { RequestHandler } from "express";
 import type { Socket, Namespace } from "socket.io";
 
@@ -12,27 +13,20 @@ class Helper {
 		this.init();
 	}
 
-	init(): void {
-		console.log(`Initializing new module helper`);
-	}
+	init(): void {}
 
-	loaded(): void {
-		console.log(`Helper loaded for module: ${this.name}`);
-	}
+	loaded(): void {}
 
 	start(): Promise<void> {
-		console.log(`Starting helper: ${this.name}`);
 		return Promise.resolve();
 	}
 
 	stop(): void {
-		console.log(`Stopping helper: ${this.name}`);
+		log.debug("Helper", `Stopping: ${this.name}`);
 	}
 
 	socketNotificationReceived(notification: string, payload: unknown): void {
-		console.log(
-			`${this.name} received a socket notification: ${notification} - Payload: ${payload}`,
-		);
+		log.debug(`Helper:${this.name}`, `socket notification: ${notification}`, payload);
 	}
 
 	sendSocketNotification(notification: string, payload: unknown): void {
@@ -63,7 +57,6 @@ class Helper {
 	setSocketIO(socketio: Namespace): void {
 		this.socketio = socketio;
 
-		console.log(`Connecting socketio for: ${this.name}`);
 
 		this.socketio.on("connection", (socket: Socket) => {
 			// socket.onevent is an internal Socket.IO API used here to intercept

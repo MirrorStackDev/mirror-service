@@ -1,5 +1,6 @@
 import { ClientSocket } from "./clientSocket.js";
-import { getClient } from "./clientState.js";
+import { getClient, getDefaultModules } from "./clientState.js";
+import { log } from "./logger.js";
 import type { ModulePosition, ModuleInfo } from "../types/module.js";
 import type { ClientPermission } from "../types/index.js";
 
@@ -73,7 +74,7 @@ export class Module {
 				this.nunjucksEnvironment().render(template, this.getTemplateData(), (err: Error | null, result: string) => {
 					const wrapper = document.createElement("div");
 					if (err) {
-						console.error(`[${this.name}] Template render error:`, err);
+						log.error(this.name, "Template render error:", err);
 						wrapper.innerHTML = `<span class="dimmed">Template error: ${err.message}</span>`;
 					} else {
 						wrapper.innerHTML = result ?? "";
@@ -87,14 +88,14 @@ export class Module {
 
 	notificationReceived(notification: string, _payload: unknown, sender?: Module): void {
 		if (sender) {
-			console.log(`${this.name} received module notification: ${notification} from ${sender.name}`);
+			log.debug(this.name, `notification from ${sender.name}: ${notification}`);
 		} else {
-			console.log(`${this.name} received system notification: ${notification}`);
+			log.debug(this.name, `system notification: ${notification}`);
 		}
 	}
 
 	socketNotificationReceived(notification: string, payload: unknown): void {
-		console.log(`${this.name} received socket notification: ${notification} - Payload: ${payload}`);
+		log.debug(this.name, `socket notification: ${notification}`, payload);
 	}
 
 	suspend(): void {}
@@ -102,11 +103,10 @@ export class Module {
 	resume(): void {}
 
 	loadDependencies(): void {
-		const client = getClient();
 		const dependenciesURL: string[] = [];
 		const stylesURL: string[] = [];
 
-		const urlPrefix = client.defModules.includes(this.name)
+		const urlPrefix = getDefaultModules().includes(this.name)
 			? "/node_modules/"
 			: `/modules/${this.name}/node_modules/`;
 
@@ -134,15 +134,12 @@ export class Module {
 	}
 
 	sendSocketNotification(notification: string, payload: unknown): void {
-		console.log("Sending socket notification: ", notification, " with payload: ", payload);
-		if (!this.socket) console.log("creating socket");
+		log.debug(this.name, `sendSocketNotification: ${notification}`, payload);
 		this.createSocket();
-		console.log(this.socket);
 		this.socket?.sendNotification(notification, payload);
 	}
 
 	sendNotification(notification: string, payload: unknown): void {
-		console.log("AAA");
 		getClient().sendNotification(notification, payload, this);
 	}
 
@@ -157,7 +154,7 @@ export class Module {
 		if (typeof callback === "function") {
 			usedCallback = callback as () => void;
 		} else if (typeof callback === "object") {
-			console.error("Parameter mismatch in module.hide: callback is not an optional parameter!");
+			log.error(this.name, "Parameter mismatch in module.hide: callback is not optional");
 			usedOptions = callback as Record<string, unknown>;
 		}
 
@@ -183,7 +180,7 @@ export class Module {
 		if (typeof callback === "function") {
 			usedCallback = callback as () => void;
 		} else if (typeof callback === "object") {
-			console.error("Parameter mismatch in module.show: callback is not an optional parameter!");
+			log.error(this.name, "Parameter mismatch in module.show: callback is not optional");
 			usedOptions = callback as Record<string, unknown>;
 		}
 

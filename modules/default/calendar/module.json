@@ -8,6 +8,7 @@
 	},
 	"config": [
 		{ "key": "calendars", "type": "urllist", "default": [], "label": "Calendar URLs" },
+		{ "key": "displaySymbol", "type": "boolean", "default": false, "label": "Show icons" },
 		{ "key": "maximumEntries", "type": "number", "default": 10, "label": "Max entries" },
 		{ "key": "maximumNumberOfDays", "type": "number", "default": 365, "label": "Days ahead" },
 		{

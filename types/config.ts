@@ -30,7 +30,6 @@ export interface ServerConfig {
 	customCss: string;
 	rootConf: string;
 	clientConfigs: string[];
-	providedModules: string[];
 	rootDir?: string;
 }
 

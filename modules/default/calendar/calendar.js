@@ -61,7 +61,12 @@ class calendar extends Module {
 	}
 
 	getStyles () {
-		return ["calendar.css"];
+		const base = this.data.path;
+		return [
+			`${base}node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css`,
+			`${base}node_modules/@fortawesome/fontawesome-free/css/solid.min.css`,
+			"calendar.css",
+		];
 	}
 
 	getScripts () {

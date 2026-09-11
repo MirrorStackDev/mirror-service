@@ -60,7 +60,11 @@ class weather extends Module {
 	firstEvent = null;
 
 	getStyles () {
-		return ["weather.css"];
+		const base = this.data.path;
+		return [
+			`${base}node_modules/weather-icons/css/weather-icons.min.css`,
+			"weather.css",
+		];
 	}
 
 	getScripts () {
