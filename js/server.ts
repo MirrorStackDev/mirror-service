@@ -17,6 +17,7 @@ import type { ClientLayout, ModuleDefinition } from "../types/module.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerUserRoutes, registerServiceRoutes } from "./routes/user.js";
+import { registerControlRoutes } from "./routes/control.js";
 import { loadTrackerFile, setupTrackerSocket } from "./socketTracker.js";
 import { registerDocsRoute } from "./routes/openapi.js";
 
@@ -108,6 +109,14 @@ class Server {
 		registerAdminRoutes(this.app, this.auth, this.config);
 	}
 
+	controlEndpoints(): void {
+		registerControlRoutes(
+			this.app, this.auth, this.config,
+			this.clientMap,
+			() => this.trackedClients,
+		);
+	}
+
 	userServiceEndpoints(): void {
 		registerServiceRoutes(this.app, () => this.defaultModuleNames);
 	}
@@ -147,6 +156,7 @@ class Server {
 			this.authEndpoints();
 			this.userEndpoints();
 			this.adminEndpoints();
+			this.controlEndpoints();
 
 			this.app.use(
 				helmet({

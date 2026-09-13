@@ -31,6 +31,7 @@ export interface ServerConfig {
 	rootConf: string;
 	clientConfigs: string[];
 	rootDir?: string;
+	apiKey?: string;
 }
 
 export interface ElectronConfig {

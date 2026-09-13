@@ -6,7 +6,7 @@
 	"scripts": {
 		"test": "jest",
 		"prebuild": "find configs -name 'index.html' -delete",
-		"build:server": "tsc -p tsconfig.json && cp -r js/db/migrations dist/js/db/migrations",
+		"build:server": "tsc -p tsconfig.json && cp -r js/db/migrations/. dist/js/db/migrations/",
 		"build:client": "esbuild js/clientMain.ts --bundle --outfile=dist/client/client.bundle.js --platform=browser --target=es2020",
 		"build": "npm run build:server && npm run build:client",
 		"typecheck:client": "tsc -p tsconfig.client.json",
@@ -15,7 +15,7 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"db:generate": "drizzle-kit generate",
-		"postdb:generate": "cp -r js/db/migrations dist/js/db/migrations",
+		"postdb:generate": "cp -r js/db/migrations/. dist/js/db/migrations/",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"client:config": "bash scripts/client-config.sh",

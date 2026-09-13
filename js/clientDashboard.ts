@@ -59,7 +59,10 @@ export async function startDashboardClient(clientConfig: ClientConfig): Promise<
 
 	const modules = session.role === "admin"
 		? clientConfig.defaultModules
-		: [{ module: "personalization", position: "middle_center" as const, config: {} }];
+		: [
+			{ module: "personalization", position: "middle_center" as const, config: {} },
+			{ module: "profileSettings", position: "middle_center" as const, config: {} },
+		];
 
 	log.info("Client", `Dashboard session: ${session.username} (${session.role})`);
 	return { name: clientConfig.name, modules };

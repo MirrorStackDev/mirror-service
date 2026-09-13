@@ -1,0 +1,88 @@
+.ps-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+	min-width: 280px;
+}
+
+.ps-title {
+	margin: 0;
+	font-size: var(--font-size-small);
+	font-weight: 400;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--color-text-dimmed);
+}
+
+.ps-section {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.ps-section-heading {
+	margin: 0;
+	font-size: var(--font-size-xsmall);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--color-text-dimmed);
+}
+
+.ps-label {
+	font-size: var(--font-size-xsmall);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--color-text-dimmed);
+}
+
+.ps-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.ps-input {
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid #333;
+	color: var(--color-text-bright);
+	font-size: var(--font-size-small);
+	padding: 0.35rem 0;
+	outline: none;
+	transition: border-color 0.15s;
+	width: 100%;
+	font-family: inherit;
+}
+
+.ps-input:focus {
+	border-bottom-color: var(--color-text-bright);
+}
+
+.ps-input::placeholder {
+	color: var(--color-text-dimmed);
+	font-size: var(--font-size-xsmall);
+}
+
+.ps-save-btn {
+	align-self: flex-start;
+	border-color: var(--panel-accent) !important;
+	color: var(--panel-accent) !important;
+}
+
+.ps-save-btn:hover {
+	background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.ps-status {
+	margin: 0;
+	font-size: var(--font-size-xsmall);
+	min-height: 1rem;
+}
+
+.ps-status-ok {
+	color: #4ade80;
+}
+
+.ps-status-error {
+	color: #f87171;
+}

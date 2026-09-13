@@ -6,7 +6,6 @@ import { AuthService } from "../authService.js";
 import { getDb } from "../db/index.js";
 import { clients as clientsTable, clientUsers as clientUsersTable, userConfigs as userConfigsTable } from "../db/schema.js";
 import type { ServerConfig } from "../../types/config.js";
-import type { ClientLayout, ModuleDefinition } from "../../types/module.js";
 import type ClientTracker from "../clientTracker.js";
 import type { Socket as SocketIOSocket } from "socket.io";
 import { requireAuth, resolveLayout } from "./helpers.js";
@@ -446,6 +445,91 @@ export function registerUserRoutes(
 			...(body.action === "select" ? { page: body.page as number } : {}),
 			...(body.action === "showHidden" ? { name: body.name as string } : {}),
 		});
+		res.json({ ok: true });
+	});
+
+	/**
+	 * @openapi
+	 * /user/profile:
+	 *   get:
+	 *     summary: Returns the logged-in user's profile (username, displayName)
+	 *     tags: [User]
+	 *     security:
+	 *       - cookie: []
+	 *     responses:
+	 *       200:
+	 *         description: User profile
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 username: { type: string }
+	 *                 displayName: { type: string }
+	 *               required: [username, displayName]
+	 *       401:
+	 *         description: Not authenticated
+	 *         content:
+	 *           application/json:
+	 *             schema: { $ref: '#/components/schemas/Error' }
+	 */
+	app.get("/user/profile", authed, (req, res) => {
+		const session = (req as typeof req & { sessionInfo: { username: string; displayName: string } }).sessionInfo;
+		res.json({ username: session.username, displayName: session.displayName });
+	});
+
+	/**
+	 * @openapi
+	 * /user/profile:
+	 *   put:
+	 *     summary: Update the logged-in user's display name and/or password
+	 *     tags: [User]
+	 *     security:
+	 *       - cookie: []
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               displayName: { type: string }
+	 *               password: { type: string }
+	 *               currentPassword: { type: string }
+	 *     responses:
+	 *       200:
+	 *         description: Profile updated
+	 *         content:
+	 *           application/json:
+	 *             schema: { $ref: '#/components/schemas/Ok' }
+	 *       400:
+	 *         description: Validation error
+	 *         content:
+	 *           application/json:
+	 *             schema: { $ref: '#/components/schemas/Error' }
+	 *       401:
+	 *         description: Not authenticated or wrong current password
+	 *         content:
+	 *           application/json:
+	 *             schema: { $ref: '#/components/schemas/Error' }
+	 */
+	app.put("/user/profile", authed, (req, res) => {
+		const session = (req as typeof req & { sessionInfo: { username: string } }).sessionInfo;
+		const { displayName, password, currentPassword } = req.body as {
+			displayName?: string;
+			password?: string;
+			currentPassword?: string;
+		};
+
+		if (password) {
+			if (!currentPassword) { res.status(400).json({ error: "Current password required to set a new password" }); return; }
+			const valid = auth.login(session!.username, currentPassword);
+			if (!valid) { res.status(401).json({ error: "Current password is incorrect" }); return; }
+		}
+
+		if (!displayName && !password) { res.status(400).json({ error: "Nothing to update" }); return; }
+
+		auth.updateAccount(session!.username, { displayName, password });
 		res.json({ ok: true });
 	});
 }

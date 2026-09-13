@@ -32,7 +32,7 @@ type LoadedHelper = { helper: Helper; manifest: ModuleManifest | null };
 const coreModules = new Set([
 	"alert", "clock", "dbbutton",
 	"clientDisplay", "clientDetailes",
-	"personalization", "personalUserSwitcher", "userManager",
+	"personalization", "personalUserSwitcher", "userManager", "profileSettings",
 ]);
 
 /**
