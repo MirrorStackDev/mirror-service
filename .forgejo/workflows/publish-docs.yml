@@ -1,0 +1,36 @@
+name: publish-docs
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate TypeDoc
+        run: npm run docs
+
+      - name: Export OpenAPI spec
+        run: npm run export-openapi
+
+      - name: Deploy to VPS
+        env:
+          DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DOCS_DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          rsync -rlptzv --delete -e "ssh -i ~/.ssh/deploy_key" docs/ root@"$DEPLOY_HOST":/

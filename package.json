@@ -19,7 +19,8 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"client:config": "bash scripts/client-config.sh",
-		"docs": "typedoc"
+		"docs": "typedoc",
+		"export-openapi": "node js/scripts/export-openapi.mjs"
 	},
 	"author": "Dalibor Peňas",
 	"license": "MIT",
