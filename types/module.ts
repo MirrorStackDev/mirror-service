@@ -67,6 +67,8 @@ export interface ClientConfig {
 	userSwitchMode: UserSwitchMode;
 	users: string[];
 	defaultModules: ModuleDefinition[];
+	/** Dashboard only — whether to render the top nav bar. Defaults to true when absent. */
+	showNav?: boolean;
 }
 
 // Active config for the currently displayed user, flat modules or paged layout

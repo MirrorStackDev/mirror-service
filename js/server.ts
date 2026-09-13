@@ -38,7 +38,7 @@ class Server {
 	constructor(rootDir: string, config: ServerConfig) {
 		this.rootDir = rootDir;
 		this.app = express();
-		this.port = config.port || 8080;
+		this.port = config.port ?? 8080;
 		this.serverSockets = new Set();
 		this.server = null;
 		this.config = config;

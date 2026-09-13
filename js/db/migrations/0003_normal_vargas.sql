@@ -1,0 +1,1 @@
+ALTER TABLE `clients` ADD `show_nav` integer DEFAULT true NOT NULL;

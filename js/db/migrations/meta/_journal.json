@@ -22,6 +22,13 @@
       "when": 1789072332086,
       "tag": "0002_boring_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789298368008,
+      "tag": "0003_normal_vargas",
+      "breakpoints": true
     }
   ]
 }

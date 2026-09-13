@@ -297,6 +297,7 @@ export function registerAdminRoutes(app: Application, auth: AuthService, config:
 			userSwitchMode: clientsTable.userSwitchMode,
 			defaultModules: clientsTable.defaultModules,
 			layout: clientsTable.layout,
+			showNav: clientsTable.showNav,
 		}).from(clientsTable).where(eq(clientsTable.name, clientName)).get();
 
 		if (!row) { res.status(404).json({ error: "Client not found" }); return; }
@@ -307,6 +308,7 @@ export function registerAdminRoutes(app: Application, auth: AuthService, config:
 			userSwitchMode: row.userSwitchMode,
 			defaultModules: JSON.parse(row.defaultModules) as unknown[],
 			layout: row.layout ? JSON.parse(row.layout) as ClientLayout : null,
+			showNav: row.showNav,
 		});
 	});
 
@@ -363,6 +365,7 @@ export function registerAdminRoutes(app: Application, auth: AuthService, config:
 			userSwitchMode?: string;
 			defaultModules?: unknown[];
 			layout?: ClientLayout | null;
+			showNav?: boolean;
 		};
 
 		if (body.type !== undefined && body.type !== "mirror" && body.type !== "dashboard") {
@@ -382,12 +385,16 @@ export function registerAdminRoutes(app: Application, auth: AuthService, config:
 				res.status(400).json({ error: "layout must have pages (array) and fixed (array)" }); return;
 			}
 		}
+		if (body.showNav !== undefined && typeof body.showNav !== "boolean") {
+			res.status(400).json({ error: "showNav must be a boolean" }); return;
+		}
 
-		const patch: { type?: string; userSwitchMode?: string; defaultModules?: string; layout?: string | null } = {};
+		const patch: { type?: string; userSwitchMode?: string; defaultModules?: string; layout?: string | null; showNav?: boolean } = {};
 		if (body.type !== undefined) patch.type = body.type;
 		if (body.userSwitchMode !== undefined) patch.userSwitchMode = body.userSwitchMode;
 		if (body.defaultModules !== undefined) patch.defaultModules = JSON.stringify(body.defaultModules);
 		if (body.layout !== undefined) patch.layout = body.layout === null ? null : JSON.stringify(body.layout);
+		if (body.showNav !== undefined) patch.showNav = body.showNav;
 
 		if (Object.keys(patch).length === 0) {
 			res.status(400).json({ error: "No valid fields provided" }); return;

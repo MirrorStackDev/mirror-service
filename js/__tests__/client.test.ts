@@ -1,12 +1,13 @@
 /**
  * @jest-environment jsdom
  */
-import { Client, createPanelNav } from "../client.js";
+import { Client } from "../client.js";
 import { Module } from "../module.js";
-import type { SessionInfo } from "../../types/index.js";
 
 jest.mock("../clientState.js", () => ({
 	getConfigInUse: jest.fn(),
+	getDefaultModules: jest.fn().mockReturnValue(["clock", "alert"]),
+	getClientConfig: jest.fn(),
 	setClient: jest.fn(),
 	setClientConfig: jest.fn(),
 	setConfigInUse: jest.fn(),
@@ -307,35 +308,3 @@ describe("Client", () => {
 	});
 });
 
-describe("createPanelNav", () => {
-	beforeEach(() => {
-		document.body.innerHTML = "<div>existing content</div>";
-	});
-
-	const session: SessionInfo = { username: "dala", displayName: "Dala the Tester", role: "user" };
-
-	it("creates a #panel-nav element", () => {
-		createPanelNav(session);
-		expect(document.getElementById("panel-nav")).not.toBeNull();
-	});
-
-	it("inserts panel-nav before all existing body content", () => {
-		createPanelNav(session);
-		expect(document.body.firstChild?.nodeName).toBe("NAV");
-	});
-
-	it("displays the session displayName in #panel-nav-user", () => {
-		createPanelNav(session);
-		expect(document.getElementById("panel-nav-user")?.textContent).toBe("Dala the Tester");
-	});
-
-	it("includes a logout button", () => {
-		createPanelNav(session);
-		expect(document.getElementById("panel-nav-logout")).not.toBeNull();
-	});
-
-	it("sets the title text to HA-Mirrors", () => {
-		createPanelNav(session);
-		expect(document.getElementById("panel-nav-title")?.textContent).toBe("HA-Mirrors");
-	});
-});

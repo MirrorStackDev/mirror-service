@@ -226,6 +226,7 @@ describe("userManager", () => {
 				.mockResolvedValueOnce({ ok: true, json: async () => users } as Response)  // fetchUsers
 				.mockResolvedValueOnce({ ok: true, json: async () => [] } as Response);     // fetchClients in openForm is not called here
 			const m = make();
+			await m.start();
 			const el = await m.createDom();
 			expect(el.querySelectorAll(".um-row")).toHaveLength(2);
 		});
@@ -233,6 +234,7 @@ describe("userManager", () => {
 		it("shows an empty-state message when no users exist", async () => {
 			h.fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] } as Response);
 			const m = make();
+			await m.start();
 			const el = await m.createDom();
 			expect(el.querySelector(".popup-empty")?.textContent).toBe("No users found.");
 		});

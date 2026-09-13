@@ -23,6 +23,7 @@ export const clients = sqliteTable("clients", {
 	userSwitchMode: text("user_switch_mode").notNull().default("SAVE"),
 	defaultModules: text("default_modules").notNull().default("[]"),  // JSON: ModuleDefinition[] — legacy, used when layout is null
 	layout:         text("layout"),                                    // JSON: ClientLayout | null
+	showNav:        integer("show_nav", { mode: "boolean" }).notNull().default(true),
 	// runtime tracker state — reset to defaults on server start
 	status:      text("status").notNull().default("offline"),
 	currentUser: text("current_user").notNull().default("default"),

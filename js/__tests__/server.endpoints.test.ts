@@ -138,6 +138,9 @@ describe("Server.userEndpoints", () => {
 
 	beforeEach(() => {
 		rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "dalamirror-user-ep-"));
+		for (const m of ["clock", "dbbutton"]) {
+			fs.mkdirSync(path.join(rootDir, "modules/default", m), { recursive: true });
+		}
 		db = initDb(":memory:");
 		srv = makeServer(rootDir, db);
 		srv.auth.createAccount("alice", "Alice", "user", "pass1");
@@ -530,6 +533,7 @@ describe("Server.adminEndpoints", () => {
 				userSwitchMode: "DELETE",
 				defaultModules: modules,
 				layout: null,
+				showNav: true,
 			});
 		});
 
