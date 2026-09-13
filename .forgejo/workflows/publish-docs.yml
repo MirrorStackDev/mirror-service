@@ -23,6 +23,9 @@ jobs:
       - name: Export OpenAPI spec
         run: npm run export-openapi
 
+      - name: Install deploy tools
+        run: apt-get update -qq && apt-get install -y -qq rsync openssh-client
+
       - name: Deploy to VPS
         env:
           DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
